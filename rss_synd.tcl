@@ -5,7 +5,8 @@
 #
 #
 # Name: RSS & Atom Syndication Script for Eggdrop
-# Author: Pho3niX
+# Author: Pho3niX (Original)
+# Maintainer: DiamantTh <https://github.com/DiamantTh>
 # Link: https://github.com/MICE07/rss_synd.tcl
 # Tags: rss, atom, syndication
 # Updated: 03-Oct-2025
