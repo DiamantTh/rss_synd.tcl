@@ -54,6 +54,8 @@ The following options can be defined globally in the default configuration or pe
 | Option | Description | Default | Example |
 | --- | --- | --- | --- |
 | `https-allow-legacy` | Allows TLS 1.0/1.1 as a fallback (insecure). | `0` | `1` |
+| `log-mode` | Logging strategy for Eggdrop’s console output. Use `immediate` for direct `putlog` calls or `buffered` to collect messages and emit summaries. | `immediate` | `buffered` |
+| `log-interval` | Interval in minutes before buffered log summaries are flushed. Ignored when `log-mode` is `immediate`. | `5` | `10` |
 | `user-agent-rotate` | Rotation strategy for the User-Agent list: use `list` for round-robin or pass a command name that returns the next agent. The command receives the feed name and current settings and may return a string or a dict containing `user-agent` plus extra state. | `list` | `list` / `::my::ua::next` |
 | `trigger` | Public trigger text; `@@feedid@@` is replaced with the feed ID. | `!rss @@feedid@@` | `!news @@feedid@@` |
 | `evaluate-tcl` | Runs outputs through Tcl before sending them. | `0` | `1` |
@@ -110,6 +112,8 @@ namespace eval ::rss-synd {
         "evaluate-tcl"          0
         "update-interval"       30
         "output-order"          0
+        "log-mode"              "immediate"
+        "log-interval"         5
         "timeout"               60000
         "channels"              "#channel"
         "trigger"               "!rss @@feedid@@"
@@ -128,6 +132,15 @@ namespace eval ::rss-synd {
     }
 }
 ```
+
+### Logging & keeping DCC quiet
+
+Eggdrop writes script output to the party line (DCC chat). To reduce noise you can enable buffered logging:
+
+1. Set `log-mode` to `buffered` in the defaults.
+2. Adjust `log-interval` to define how many minutes the script should wait before it flushes a summary (counts per level plus first/last message).
+
+While buffered mode is active, individual log entries are grouped and only a compact digest is sent to DCC at the chosen interval. Switching back to `immediate` restores the previous behaviour.
 
 ## Compatibility & versions
 - Script version git-198a7a4 dated 03 Oct 2025. You can find the version information in the header of `rss_synd.tcl`.

@@ -54,6 +54,8 @@ Die folgenden Optionen kannst du global in der Default-Konfiguration oder pro Fe
 | Option | Beschreibung | Standard | Beispiel |
 | --- | --- | --- | --- |
 | `https-allow-legacy` | Erlaubt TLS 1.0/1.1 als Fallback (unsicher). | `0` | `1` |
+| `log-mode` | Logging-Strategie für die Eggdrop-Konsole. `immediate` schreibt Meldungen sofort, `buffered` sammelt sie und fasst sie zusammen. | `immediate` | `buffered` |
+| `log-interval` | Minuten bis zur Ausgabe einer zusammengefassten Log-Nachricht, wenn `log-mode` auf `buffered` steht. | `5` | `10` |
 | `user-agent-rotate` | Rotationsstrategie für den User-Agent: `list` aktiviert das eingebaute Round-Robin, alternativ kann der Name einer Prozedur angegeben werden, die den nächsten Eintrag liefert. Der Aufruf erhält Feed-Namen und aktuelle Einstellungen und darf einen String oder ein Dict mit `user-agent` plus Zusatzwerten zurückgeben. | `list` | `list` / `::mein::ua::next` |
 | `trigger` | Öffentlicher Triggertext; `@@feedid@@` wird durch die Feed-ID ersetzt. | `!rss @@feedid@@` | `!news @@feedid@@` |
 | `evaluate-tcl` | Führt Ausgaben vor dem Senden als Tcl aus. | `0` | `1` |
@@ -110,6 +112,8 @@ namespace eval ::rss-synd {
         "evaluate-tcl"          0
         "update-interval"       30
         "output-order"          0
+        "log-mode"              "immediate"
+        "log-interval"         5
         "timeout"               60000
         "channels"              "#channel"
         "trigger"               "!rss @@feedid@@"
@@ -128,6 +132,15 @@ namespace eval ::rss-synd {
     }
 }
 ```
+
+### Logging & DCC beruhigen
+
+Eggdrop schreibt Skriptmeldungen in die Party-Line (DCC-Chat). Wer den Chat ruhig halten möchte, kann das Logging puffern:
+
+1. In der Standardkonfiguration `log-mode` auf `buffered` setzen.
+2. Mit `log-interval` festlegen, wie viele Minuten zwischen zwei Sammelmeldungen liegen sollen (die Zusammenfassung enthält Anzahl pro Level sowie erste/letzte Meldung).
+
+Im Pufferbetrieb werden einzelne Meldungen nicht mehr sofort angezeigt, sondern als kompakte Übersicht nach Ablauf des Intervalls ausgegeben. Mit `immediate` lässt sich das alte Verhalten jederzeit wiederherstellen.
 
 ## Kompatibilität & Versionen
 - Skriptversion git-198a7a4 vom 03.10.2025. Die Versionsinformationen findest du direkt im Kopfbereich von `rss_synd.tcl`.

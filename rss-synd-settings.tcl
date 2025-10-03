@@ -102,6 +102,8 @@ set rss(msbulletins) {
 		"evaluate-tcl"		0
 		"update-interval"	30
 		"output-order"		0
+                "log-mode"              "immediate"
+                "log-interval"         5
 		"timeout"			60000
 		"channels"			"#channel"
 		"trigger"			"!rss @@feedid@@"
