@@ -29,32 +29,73 @@ Das Skript läuft ohne zusätzliche Pakete, jedoch sind bestimmte Funktionen nur
 Die folgenden Optionen kannst du global in der Default-Konfiguration oder pro Feed festlegen. Spezifische Feed-Werte überschreiben globale Einstellungen.
 
 ### Pflichtfelder
-- **`url`** – Adresse des RSS-/Atom-Feeds. Beispiele: `http://www.example.tld/feed.xml`, `https://www.example.tld/feed.xml`, `http://username:password@www.example.tld/feed.xml`.
-- **`channels`** – Liste der Kanäle, in denen Feed-Ankündigungen und Trigger aktiv sind (mit Leerzeichen trennen).
-- **`database`** – (Relativer) Pfad zur Datenbankdatei, z. B. `./scripts/feedname.db`.
-- **`output`** – Ausgabemuster für Ankündigungen im Kanal.
-- **`max-depth`** – Maximale Anzahl an Weiterleitungen (HTTP Location-Header). Standard: `5`.
-- **`timeout`** – Timeout für Verbindungen in Millisekunden. Standard: `60000`.
-- **`user-agent`** – User-Agent-Header für HTTP-Anfragen.
-- **`announce-type`** – Modus für automatische Ankündigungen (`0` = Channel-Message, `1` = Channel-Notice). Standard: `0`.
-- **`announce-output`** – Maximale Anzahl Artikel pro automatischer Ankündigung (`0` deaktiviert). Standard: `3`.
-- **`trigger-type`** – Ausgabeformat bei manuellen Triggern nach dem Schema `<channel>:<privmsg>` (0 = Channel-Message, 1 = Channel-Notice, 2 = User-Message, 3 = User-Notice). Standard: `0:2`.
-- **`trigger-output`** – Maximale Anzahl Artikel pro Trigger (`0` deaktiviert). Standard: `3`.
-- **`update-interval`** – Abfrageintervall in Minuten (empfohlen ≥ 15). Websites können bei zu häufigen Abfragen sperren. Standard: `30`.
+| Option | Beschreibung | Standard | Beispiel |
+| --- | --- | --- | --- |
+| `url` | Adresse des RSS-/Atom-Feeds. | – | `https://example.tld/feed.xml` |
+| `channels` | Liste der Kanäle für Ankündigungen und Trigger (Leerzeichen-getrennt). | `#channel` | `#news #alerts` |
+| `database` | Pfad zur Datenbankdatei. | – | `./scripts/news.db` |
+| `output` | Nachrichtenformat mit Cookies für Ankündigungen. | `[\002@@channel!title@@@@title@@\002] @@item!title@@@@entry!title@@ - @@item!link@@@@entry!link!=href@@` | `[\002@@channel!title@@\002] @@item!title@@ – @@item!link@@` |
+| `max-depth` | Maximale Anzahl erlaubter HTTP-Weiterleitungen. | `5` | `3` |
+| `timeout` | Verbindungs-Timeout in Millisekunden. | `60000` | `45000` |
+| `user-agent` | HTTP User-Agent-Header. | `Mozilla/5.0 (Windows; U; Windows NT 6.1; en-GB; rv:1.9.2.2) Gecko/20100316 Firefox/3.6.2` | `rss-synd/0.5.1 (+https://example.tld)` |
+| `announce-type` | Modus für automatische Ankündigungen (`0` = Channel-Message, `1` = Channel-Notice). | `0` | `1` |
+| `announce-output` | Anzahl Artikel pro Ankündigung (`0` deaktiviert). | `3` | `5` |
+| `trigger-type` | Ausgabeformat für Trigger `<channel>:<privmsg>` (`0/1` für Channel, `2/3` für User). | `0:2` | `1:3` |
+| `trigger-output` | Anzahl Artikel pro Trigger (`0` deaktiviert). | `3` | `1` |
+| `update-interval` | Abrufintervall in Minuten. | `30` | `60` |
 
 ### Optionale Einstellungen
-- **`https-allow-legacy`** – Aktiviert bei Bedarf TLS 1.0/1.1, wenn moderne Protokolle nicht verfügbar sind. Bei Rückfall wird eine Warnung geloggt. Standard: `0` (modernes TLS erzwingen).
-- **`trigger`** – Öffentlicher Trigger zum Auflisten von Feeds. Wenn nur einmal definiert, nutze `@@feedid@@` als Platzhalter für die Feed-ID.
-- **`evaluate-tcl`** – Führt die Ausgabe vor dem Senden als Tcl aus. Standard: `0` (aus).
-- **`enable-gzip`** – Aktiviert Gzip-Dekompression für den Feed. Standard: `0` (aus).
-- **`remove-empty`** – Entfernt leere Cookies aus der Ausgabe. Standard: `1` (an).
-- **`output-order`** – Reihenfolge der Ankündigungen (`0` = Älteste→Neueste, `1` = Neueste→Älteste).
-- **`charset`** – Zielzeichensatz der Ausgabe, z. B. `utf-8`, `cp1251`, `iso8859-1`. Standard ist das System-Charset.
-- **`feedencoding`** – Zeichensatz des Feeds (oft im `<?xml>`-Header). Beachte die Tcl-Bezeichnungen für Encodings, z. B. `cp1251` statt `windows-1251`.
+| Option | Beschreibung | Standard | Beispiel |
+| --- | --- | --- | --- |
+| `https-allow-legacy` | Erlaubt TLS 1.0/1.1 als Fallback (unsicher). | `0` | `1` |
+| `trigger` | Öffentlicher Triggertext; `@@feedid@@` wird durch die Feed-ID ersetzt. | `!rss @@feedid@@` | `!news @@feedid@@` |
+| `evaluate-tcl` | Führt Ausgaben vor dem Senden als Tcl aus. | `0` | `1` |
+| `enable-gzip` | Aktiviert Gzip-Dekomprimierung für Feeds. | `0` | `1` |
+| `remove-empty` | Entfernt leere Cookies aus der Ausgabe. | `1` | `0` |
+| `output-order` | Reihenfolge der Artikel (`0` = älteste→neueste, `1` = neueste→älteste). | `0` | `1` |
+| `charset` | Zielzeichensatz für Nachrichten. | Systemstandard | `utf-8` |
+| `feedencoding` | Erzwingt einen Zeichensatz beim Einlesen des Feeds. | – | `cp1251` |
 
 ### Cookies
-Die Ausgabe basiert auf einem dynamischen Cookie-System, dessen verfügbare Variablen vom Feed abhängen.
+| Cookie | Bedeutung | Beispiel |
+| --- | --- | --- |
+| `@@title@@` | Titel des Feeds oder des aktuellen Artikels (abhängig vom Kontext). | `Neue Version veröffentlicht` |
+| `@@entry!link@@` | Link des aktuellen Artikels. | `https://example.tld/post` |
+| `@@entry!link!=href@@` | Wert des `href`-Attributs eines Link-Tags. | `https://example.tld/post` |
+| `@@entry!author!name@@` | Name des Autors im Artikel. | `Jane Doe` |
 
-- Seit Version 0.3 kannst du auf beliebige Tags innerhalb eines Artikels oder des gesamten Feeds zugreifen. Verwende das Muster `@@<tag>!<subtag>!...@@`; die Cookies `@@item@@` und `@@entry@@` zeigen stets auf den aktuellen Artikel.
-- Attribute eines Tags lassen sich über `=<attribut>` ausgeben, z. B. `@@entry!link!=href@@` für das `href`-Attribut des `<link>`-Tags.
-- Weitere Beispiele findest du direkt in `rss_synd.tcl`.
+## Beispielkonfiguration
+```tcl
+namespace eval ::rss-synd {
+    set rss(news) {
+        "url"       "https://example.tld/feed.xml"
+        "channels"  "#news #alerts"
+        "database"  "./scripts/news.db"
+        "output"    "[\002@@channel!title@@@@title@@\002] @@item!title@@ - @@item!link@@"
+        "trigger"   "!news @@feedid@@"
+    }
+
+    set default {
+        "announce-output"       3
+        "trigger-output"        3
+        "remove-empty"          1
+        "trigger-type"          0:2
+        "announce-type"         0
+        "max-depth"             5
+        "evaluate-tcl"          0
+        "update-interval"       30
+        "output-order"          0
+        "timeout"               60000
+        "channels"              "#channel"
+        "trigger"               "!rss @@feedid@@"
+        "output"                "[\002@@channel!title@@@@title@@\002] @@item!title@@@@entry!title@@ - @@item!link@@@@entry!link!=href@@"
+        "user-agent"            "Mozilla/5.0 (Windows; U; Windows NT 6.1; en-GB; rv:1.9.2.2) Gecko/20100316 Firefox/3.6.2"
+        "https-allow-legacy"    0
+    }
+}
+```
+
+## Kompatibilität & Versionen
+- Skriptversion 0.5.1 vom 07.11.2014. Die Versionsinformationen findest du direkt im Kopfbereich von `rss_synd.tcl`.
+- Benötigt einen Eggdrop mit Tcl-Unterstützung und dem Standardpaket `http`; optionale Features setzen `base64`, `tls` und `Trf` voraus (`package require …` in `rss_synd.tcl`).
+- Für HTTPS-Verbindungen initialisiert das Skript standardmäßig TLS 1.2/1.3 und registriert eigene TLS-Sockets; über `https-allow-legacy` kannst du bei Bedarf ältere Protokolle freischalten.
