@@ -1,74 +1,76 @@
 # RSS Synd Script
 
-## Einleitung
-Das Skript `rss_synd.tcl` erweitert Eggdrop-Bots um die Möglichkeit, RSS- und Atom-Feeds automatisiert auszulesen, neue Einträge zu erkennen und sie in IRC-Kanälen anzukündigen. Es unterstützt dabei sichere Verbindungen, benutzerdefinierte Ausgaben und flexible Trigger-Mechanismen.
+> **German version:** See [README.de.md](README.de.md).
 
-### Hauptfeatures
-- Regelmäßiges Abrufen und Ankündigen mehrerer RSS-/Atom-Feeds.
-- Unterstützung für HTTP-Authentifizierung, HTTPS und gzip-komprimierte Feeds.
-- Anpassbare Trigger, Ausgabeformate und Ankündigungsoptionen pro Feed.
-- Optionales Nachbearbeiten der Ausgaben über Tcl-Ausdrücke.
+## Introduction
+The `rss_synd.tcl` script extends Eggdrop bots with the ability to automatically read RSS and Atom feeds, detect new entries, and announce them in IRC channels. It supports secure connections, customizable output, and flexible trigger mechanisms.
+
+### Key features
+- Regular polling and announcing of multiple RSS/Atom feeds.
+- Support for HTTP authentication, HTTPS, and gzip-compressed feeds.
+- Customizable triggers, output formats, and announcement options per feed.
+- Optional post-processing of outputs via Tcl expressions.
 
 ## Installation
-1. Kopiere `rss_synd.tcl` und `rss-synd-settings.tcl` in das Skriptverzeichnis deines Eggdrop-Bots.
-2. Ergänze deine `eggdrop.conf` um die Zeile `source scripts/rss-synd.tcl` (Pfad ggf. anpassen).
+1. Copy `rss_synd.tcl` and `rss-synd-settings.tcl` into your Eggdrop bot's script directory.
+2. Add the line `source scripts/rss-synd.tcl` to your `eggdrop.conf` (adjust the path as needed).
 
-### Paketinstallation (optionale Features)
-Die folgenden optionalen Funktionen erfordern zusätzliche Tcl-Erweiterungen:
+### Package installation (optional features)
+The following optional features require additional Tcl extensions:
 
-| Feature | Benötigte Tcl-Erweiterungen |
-|---------|-----------------------------|
-| HTTP-Authentifizierung | `base64` aus `tcllib` |
-| HTTPS-Unterstützung | `tls` |
-| Gzip-Dekomprimierung | `Trf` |
+| Feature | Required Tcl extensions |
+|---------|-------------------------|
+| HTTP authentication | `base64` from `tcllib` |
+| HTTPS support | `tls` |
+| Gzip decompression | `Trf` |
 
-Installiere die benötigten Erweiterungen je nach Plattform über den jeweiligen Paketmanager, vorgefertigte Tcl-Pakete oder verfügbare Community-Repositorien.
+Install the required extensions via your platform's package manager, prebuilt Tcl packages, or community repositories.
 
-## Abhängigkeiten und Hinweise
-Das Skript läuft ohne zusätzliche Pakete, jedoch sind bestimmte Funktionen nur mit den oben aufgeführten Erweiterungen verfügbar.
+## Dependencies and notes
+The script runs without additional packages, but certain features are only available with the extensions listed above.
 
-- **HTTPS-Hinweis:** Zertifikate werden standardmäßig geprüft und es sind nur TLS 1.2/1.3 aktiv. Wenn deine Umgebung ausschließlich ältere Protokolle bietet, setze die Option `https-allow-legacy` auf `1` (unsicher, nur für Notfälle).
+- **HTTPS note:** Certificates are validated by default and only TLS 1.2/1.3 are enabled. If your environment only offers older protocols, set the `https-allow-legacy` option to `1` (insecure, for emergencies only).
 
-## Konfiguration
-Die folgenden Optionen kannst du global in der Default-Konfiguration oder pro Feed festlegen. Spezifische Feed-Werte überschreiben globale Einstellungen.
+## Configuration
+The following options can be defined globally in the default configuration or per feed. Feed-specific values override global settings.
 
-### Pflichtfelder
-| Option | Beschreibung | Standard | Beispiel |
+### Required fields
+| Option | Description | Default | Example |
 | --- | --- | --- | --- |
-| `url` | Adresse des RSS-/Atom-Feeds. | – | `https://example.tld/feed.xml` |
-| `channels` | Liste der Kanäle für Ankündigungen und Trigger (Leerzeichen-getrennt). | `#channel` | `#news #alerts` |
-| `database` | Pfad zur Datenbankdatei. | – | `./scripts/news.db` |
-| `output` | Nachrichtenformat mit Cookies für Ankündigungen. | `[\002@@channel!title@@@@title@@\002] @@item!title@@@@entry!title@@ - @@item!link@@@@entry!link!=href@@` | `[\002@@channel!title@@\002] @@item!title@@ – @@item!link@@` |
-| `max-depth` | Maximale Anzahl erlaubter HTTP-Weiterleitungen. | `5` | `3` |
-| `timeout` | Verbindungs-Timeout in Millisekunden. | `60000` | `45000` |
-| `user-agent` | HTTP User-Agent-Header. | `Mozilla/5.0 (Windows; U; Windows NT 6.1; en-GB; rv:1.9.2.2) Gecko/20100316 Firefox/3.6.2` | `rss-synd/0.5.1 (+https://example.tld)` |
-| `announce-type` | Modus für automatische Ankündigungen (`0` = Channel-Message, `1` = Channel-Notice). | `0` | `1` |
-| `announce-output` | Anzahl Artikel pro Ankündigung (`0` deaktiviert). | `3` | `5` |
-| `trigger-type` | Ausgabeformat für Trigger `<channel>:<privmsg>` (`0/1` für Channel, `2/3` für User). | `0:2` | `1:3` |
-| `trigger-output` | Anzahl Artikel pro Trigger (`0` deaktiviert). | `3` | `1` |
-| `update-interval` | Abrufintervall in Minuten. | `30` | `60` |
+| `url` | Address of the RSS/Atom feed. | – | `https://example.tld/feed.xml` |
+| `channels` | List of channels for announcements and triggers (space-separated). | `#channel` | `#news #alerts` |
+| `database` | Path to the database file. | – | `./scripts/news.db` |
+| `output` | Message format with cookies for announcements. | `[\002@@channel!title@@@@title@@\002] @@item!title@@@@entry!title@@ - @@item!link@@@@entry!link!=href@@` | `[\002@@channel!title@@\002] @@item!title@@ – @@item!link@@` |
+| `max-depth` | Maximum number of allowed HTTP redirects. | `5` | `3` |
+| `timeout` | Connection timeout in milliseconds. | `60000` | `45000` |
+| `user-agent` | HTTP User-Agent header. | `Mozilla/5.0 (Windows; U; Windows NT 6.1; en-GB; rv:1.9.2.2) Gecko/20100316 Firefox/3.6.2` | `rss-synd/0.5.1 (+https://example.tld)` |
+| `announce-type` | Mode for automatic announcements (`0` = channel message, `1` = channel notice). | `0` | `1` |
+| `announce-output` | Number of items per announcement (`0` disables announcements). | `3` | `5` |
+| `trigger-type` | Output mode for triggers `<channel>:<privmsg>` (`0/1` for channel, `2/3` for user). | `0:2` | `1:3` |
+| `trigger-output` | Number of items per trigger (`0` disables triggers). | `3` | `1` |
+| `update-interval` | Polling interval in minutes. | `30` | `60` |
 
-### Optionale Einstellungen
-| Option | Beschreibung | Standard | Beispiel |
+### Optional settings
+| Option | Description | Default | Example |
 | --- | --- | --- | --- |
-| `https-allow-legacy` | Erlaubt TLS 1.0/1.1 als Fallback (unsicher). | `0` | `1` |
-| `trigger` | Öffentlicher Triggertext; `@@feedid@@` wird durch die Feed-ID ersetzt. | `!rss @@feedid@@` | `!news @@feedid@@` |
-| `evaluate-tcl` | Führt Ausgaben vor dem Senden als Tcl aus. | `0` | `1` |
-| `enable-gzip` | Aktiviert Gzip-Dekomprimierung für Feeds. | `0` | `1` |
-| `remove-empty` | Entfernt leere Cookies aus der Ausgabe. | `1` | `0` |
-| `output-order` | Reihenfolge der Artikel (`0` = älteste→neueste, `1` = neueste→älteste). | `0` | `1` |
-| `charset` | Zielzeichensatz für Nachrichten. | Systemstandard | `utf-8` |
-| `feedencoding` | Erzwingt einen Zeichensatz beim Einlesen des Feeds. | – | `cp1251` |
+| `https-allow-legacy` | Allows TLS 1.0/1.1 as a fallback (insecure). | `0` | `1` |
+| `trigger` | Public trigger text; `@@feedid@@` is replaced with the feed ID. | `!rss @@feedid@@` | `!news @@feedid@@` |
+| `evaluate-tcl` | Runs outputs through Tcl before sending them. | `0` | `1` |
+| `enable-gzip` | Enables gzip decompression for feeds. | `0` | `1` |
+| `remove-empty` | Removes empty cookies from the output. | `1` | `0` |
+| `output-order` | Order of items (`0` = oldest→newest, `1` = newest→oldest). | `0` | `1` |
+| `charset` | Target character set for messages. | System default | `utf-8` |
+| `feedencoding` | Forces a character set when reading the feed. | – | `cp1251` |
 
 ### Cookies
-| Cookie | Bedeutung | Beispiel |
+| Cookie | Meaning | Example |
 | --- | --- | --- |
-| `@@title@@` | Titel des Feeds oder des aktuellen Artikels (abhängig vom Kontext). | `Neue Version veröffentlicht` |
-| `@@entry!link@@` | Link des aktuellen Artikels. | `https://example.tld/post` |
-| `@@entry!link!=href@@` | Wert des `href`-Attributs eines Link-Tags. | `https://example.tld/post` |
-| `@@entry!author!name@@` | Name des Autors im Artikel. | `Jane Doe` |
+| `@@title@@` | Title of the feed or the current item (depending on context). | `New release available` |
+| `@@entry!link@@` | Link of the current item. | `https://example.tld/post` |
+| `@@entry!link!=href@@` | Value of the `href` attribute of a link tag. | `https://example.tld/post` |
+| `@@entry!author!name@@` | Name of the author in the item. | `Jane Doe` |
 
-## Beispielkonfiguration
+## Example configuration
 ```tcl
 namespace eval ::rss-synd {
     set rss(news) {
@@ -99,7 +101,7 @@ namespace eval ::rss-synd {
 }
 ```
 
-## Kompatibilität & Versionen
-- Skriptversion 0.5.1 vom 07.11.2014. Die Versionsinformationen findest du direkt im Kopfbereich von `rss_synd.tcl`.
-- Benötigt einen Eggdrop mit Tcl-Unterstützung und dem Standardpaket `http`; optionale Features setzen `base64`, `tls` und `Trf` voraus (`package require …` in `rss_synd.tcl`).
-- Für HTTPS-Verbindungen initialisiert das Skript standardmäßig TLS 1.2/1.3 und registriert eigene TLS-Sockets; über `https-allow-legacy` kannst du bei Bedarf ältere Protokolle freischalten.
+## Compatibility & versions
+- Script version 0.5.1 dated 07 Nov 2014. You can find the version information in the header of `rss_synd.tcl`.
+- Requires an Eggdrop with Tcl support and the standard `http` package; optional features rely on `base64`, `tls`, and `Trf` (`package require …` in `rss_synd.tcl`).
+- For HTTPS connections the script enables TLS 1.2/1.3 by default and registers its own TLS sockets; you can enable older protocols via `https-allow-legacy` if needed.
