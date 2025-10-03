@@ -314,8 +314,101 @@ proc ::rss-synd::trigger {nick user handle args} {
 # Feed Retrieving Functions
 ##
 
+proc ::rss-synd::next_user_agent {name feedVar} {
+        upvar 1 $feedVar feed
+
+        set now [clock seconds]
+
+        set rotation ""
+        if {[info exists feed(user-agent-rotate)] && $feed(user-agent-rotate) ne ""} {
+                set rotation $feed(user-agent-rotate)
+        }
+
+        set fallbackRaw ""
+        if {[info exists feed(user-agent)] && $feed(user-agent) ne ""} {
+                set fallbackRaw $feed(user-agent)
+        }
+
+        set parsedFallback {}
+        if {$fallbackRaw ne ""} {
+                if {[catch {llength $fallbackRaw}]} {
+                        set parsedFallback [list $fallbackRaw]
+                } else {
+                        set parsedFallback [lrange $fallbackRaw 0 end]
+                }
+        }
+
+        if {[string equal -nocase $rotation "list"]} {
+                set pool $parsedFallback
+        } else {
+                if {[llength $parsedFallback] > 0} {
+                        set pool [list [lindex $parsedFallback 0]]
+                } else {
+                        set pool {}
+                }
+        }
+
+        set fallback ""
+        if {[llength $parsedFallback] > 0} {
+                set fallback [lindex $parsedFallback 0]
+        }
+
+        set chosen ""
+        if {$rotation eq ""} {
+                set chosen $fallback
+        } elseif {[string equal -nocase $rotation "list"]} {
+                if {[llength $pool] == 0} {
+                        putlog "\002RSS Warnung\002: User-Agent-Rotation für Feed \"$name\" ist aktiviert, aber es sind keine Kandidaten hinterlegt."
+                } else {
+                        set idxKey user-agent-rotate-index
+                        if {![info exists feed($idxKey)] || ![string is integer -strict $feed($idxKey)]} {
+                                set feed($idxKey) 0
+                        }
+                        set poolSize [llength $pool]
+                        if {$poolSize <= 0} {
+                                set chosen $fallback
+                        } else {
+                                set currentIdx $feed($idxKey)
+                                if {$currentIdx < 0 || $currentIdx >= $poolSize} {
+                                        set currentIdx [expr {(($currentIdx % $poolSize) + $poolSize) % $poolSize}]
+                                }
+                                set chosen [lindex $pool $currentIdx]
+                                set feed($idxKey) [expr {($currentIdx + 1) % $poolSize}]
+                        }
+                }
+        } else {
+                if {[catch {set command [lrange $rotation 0 end]}]} {
+                        set command [list $rotation]
+                }
+                set invoke [concat $command [list $name [array get feed]]]
+                if {[catch {set result [uplevel #0 $invoke]} err]} {
+                        putlog "\002RSS Warnung\002: Benutzerdefinierte User-Agent-Rotation für Feed \"$name\" schlug fehl: $err"
+                } else {
+                        set isDict [expr {[string is list -strict $result] && ([llength $result] % 2) == 0}]
+                        if {$isDict && [dict exists $result user-agent]} {
+                                set chosen [dict get $result user-agent]
+                                dict for {key value} $result {
+                                        if {$key eq "user-agent"} {
+                                                continue
+                                        }
+                                        set feed($key) $value
+                                }
+                        } elseif {$result ne ""} {
+                                set chosen $result
+                        }
+                }
+        }
+
+        if {$chosen eq ""} {
+                set chosen $fallback
+        }
+
+        set feed(user-agent-last) $now
+        return $chosen
+}
+
 proc ::rss-synd::feed_get {args} {
-	variable rss
+        variable rss
 
 	set i 0
 	foreach name [array names rss] {
@@ -324,7 +417,8 @@ proc ::rss-synd::feed_get {args} {
 		array set feed $rss($name)
 
 		if {$feed(updated) <= [expr { [unixtime] - ($feed(update-interval) * 60) }]} {
-			::http::config -useragent $feed(user-agent)
+                        set userAgent [next_user_agent $name feed]
+			::http::config -useragent $userAgent
 
 			set feed(type) $feed(announce-type)
 			set feed(headers) [list]
@@ -337,21 +431,22 @@ proc ::rss-synd::feed_get {args} {
 				lappend feed(headers) "Accept-Encoding" "gzip"
 			}
 
-                        set getResult [catch {::http::geturl "$feed(url)" -command "[namespace current]::feed_callback {[array get feed] depth 0}" -timeout $feed(timeout) -headers $feed(headers)} token]
+			set getResult [catch {::http::geturl "$feed(url)" -command "[namespace current]::feed_callback {[array get feed] depth 0}" -timeout $feed(timeout) -headers $feed(headers)} token]
 
-                        if {$getResult != 0} {
-                                putlog "\002RSS HTTP Fehler\002: Anfrage für \"$feed(url)\" konnte nicht gestartet werden: $token"
-                                continue
-                        }
+			if {$getResult != 0} {
+				putlog "\002RSS HTTP Fehler\002: Anfrage für \"$feed(url)\" konnte nicht gestartet werden: $token"
+				continue
+			}
 
-                        set feed(updated) [unixtime]
-                        set rss($name) [array get feed]
-                        incr i
+			set feed(updated) [unixtime]
+			set rss($name) [array get feed]
+			incr i
 		}
 
 		unset feed
 	}
 }
+
 
 proc ::rss-synd::feed_callback {feedlist args} {
         set token [lindex $args end]
