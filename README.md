@@ -1,146 +1,60 @@
-################################################################################
-  README
-################################################################################
+# RSS Synd Script
 
-================================================================================
-INSTALL
-================================================================================
+## Einleitung
+Das Skript `rss_synd.tcl` erweitert Eggdrop-Bots um die Möglichkeit, RSS- und Atom-Feeds automatisiert auszulesen, neue Einträge zu erkennen und sie in IRC-Kanälen anzukündigen. Es unterstützt dabei sichere Verbindungen, benutzerdefinierte Ausgaben und flexible Trigger-Mechanismen.
 
-1. Copy rss-synd.tcl and rss-synd-settings.tcl to your scripts directory.
-2. Add "source scripts/rss-synd.tcl" to your eggdrop.conf file.
+### Hauptfeatures
+- Regelmäßiges Abrufen und Ankündigen mehrerer RSS-/Atom-Feeds.
+- Unterstützung für HTTP-Authentifizierung, HTTPS und gzip-komprimierte Feeds.
+- Anpassbare Trigger, Ausgabeformate und Ankündigungsoptionen pro Feed.
+- Optionales Nachbearbeiten der Ausgaben über Tcl-Ausdrücke.
 
-Dependencies (for additional features)
+## Installation
+1. Kopiere `rss_synd.tcl` und `rss-synd-settings.tcl` in das Skriptverzeichnis deines Eggdrop-Bots.
+2. Ergänze deine `eggdrop.conf` um die Zeile `source scripts/rss-synd.tcl` (Pfad ggf. anpassen).
 
- This script will run perfectly fine without any of these dependencies, but
-  if you want any of these features you'll need to download and install the
-  respective package(s).
+### Paketinstallation (optionale Features)
+| Feature | Benötigtes Paket | Debian/Ubuntu |
+|---------|------------------|----------------|
+| HTTP-Authentifizierung | `tcllib` (Base64) | `sudo apt-get install tcllib` |
+| HTTPS-Unterstützung | `tcl-tls` | `sudo apt-get install tcl-tls` |
+| Gzip-Dekomprimierung | `tcl-trf` | `sudo apt-get install tcl-trf` |
 
-* HTTP Authorisation
-** Requires: base64 package from tcllib to be installed.
-** Debian: apt-get install tcllib
+## Abhängigkeiten und Hinweise
+Das Skript läuft ohne zusätzliche Pakete, jedoch sind bestimmte Funktionen nur mit den oben aufgeführten Erweiterungen verfügbar.
 
-* HTTPS
-** Requires: TLS package to be installed.
-** Debian: apt-get install tcl-tls
-** Hinweis: Zertifikate werden nun standardmäßig geprüft und es werden nur TLS 1.2/1.3 aktiviert. Falls deine Umgebung nur ältere
-   Protokolle unterstützt, setze die Option `https-allow-legacy` auf 1 (unsicher, nur für Notfälle).
+- **HTTPS-Hinweis:** Zertifikate werden standardmäßig geprüft und es sind nur TLS 1.2/1.3 aktiv. Wenn deine Umgebung ausschließlich ältere Protokolle bietet, setze die Option `https-allow-legacy` auf `1` (unsicher, nur für Notfälle).
 
-* Gzip Decompression:
-** Requires: Trf package to be installed.
-** Debian: apt-get install tcl-trf
+## Konfiguration
+Die folgenden Optionen kannst du global in der Default-Konfiguration oder pro Feed festlegen. Spezifische Feed-Werte überschreiben globale Einstellungen.
 
-================================================================================
-SETTINGS
-================================================================================
+### Pflichtfelder
+- **`url`** – Adresse des RSS-/Atom-Feeds. Beispiele: `http://www.example.tld/feed.xml`, `https://www.example.tld/feed.xml`, `http://username:password@www.example.tld/feed.xml`.
+- **`channels`** – Liste der Kanäle, in denen Feed-Ankündigungen und Trigger aktiv sind (mit Leerzeichen trennen).
+- **`database`** – (Relativer) Pfad zur Datenbankdatei, z. B. `./scripts/feedname.db`.
+- **`output`** – Ausgabemuster für Ankündigungen im Kanal.
+- **`max-depth`** – Maximale Anzahl an Weiterleitungen (HTTP Location-Header). Standard: `5`.
+- **`timeout`** – Timeout für Verbindungen in Millisekunden. Standard: `60000`.
+- **`user-agent`** – User-Agent-Header für HTTP-Anfragen.
+- **`announce-type`** – Modus für automatische Ankündigungen (`0` = Channel-Message, `1` = Channel-Notice). Standard: `0`.
+- **`announce-output`** – Maximale Anzahl Artikel pro automatischer Ankündigung (`0` deaktiviert). Standard: `3`.
+- **`trigger-type`** – Ausgabeformat bei manuellen Triggern nach dem Schema `<channel>:<privmsg>` (0 = Channel-Message, 1 = Channel-Notice, 2 = User-Message, 3 = User-Notice). Standard: `0:2`.
+- **`trigger-output`** – Maximale Anzahl Artikel pro Trigger (`0` deaktiviert). Standard: `3`.
+- **`update-interval`** – Abfrageintervall in Minuten (empfohlen ≥ 15). Websites können bei zu häufigen Abfragen sperren. Standard: `30`.
 
- Follow the details below. It is possible to define values in either the
-  default variable or within the individual rss feed variables. You can define
-  values in both places, but each feeds individual settings will overwrite the
-  default ones.
+### Optionale Einstellungen
+- **`https-allow-legacy`** – Aktiviert bei Bedarf TLS 1.0/1.1, wenn moderne Protokolle nicht verfügbar sind. Bei Rückfall wird eine Warnung geloggt. Standard: `0` (modernes TLS erzwingen).
+- **`trigger`** – Öffentlicher Trigger zum Auflisten von Feeds. Wenn nur einmal definiert, nutze `@@feedid@@` als Platzhalter für die Feed-ID.
+- **`evaluate-tcl`** – Führt die Ausgabe vor dem Senden als Tcl aus. Standard: `0` (aus).
+- **`enable-gzip`** – Aktiviert Gzip-Dekompression für den Feed. Standard: `0` (aus).
+- **`remove-empty`** – Entfernt leere Cookies aus der Ausgabe. Standard: `1` (an).
+- **`output-order`** – Reihenfolge der Ankündigungen (`0` = Älteste→Neueste, `1` = Neueste→Älteste).
+- **`charset`** – Zielzeichensatz der Ausgabe, z. B. `utf-8`, `cp1251`, `iso8859-1`. Standard ist das System-Charset.
+- **`feedencoding`** – Zeichensatz des Feeds (oft im `<?xml>`-Header). Beachte die Tcl-Bezeichnungen für Encodings, z. B. `cp1251` statt `windows-1251`.
 
-Required values:
+### Cookies
+Die Ausgabe basiert auf einem dynamischen Cookie-System, dessen verfügbare Variablen vom Feed abhängen.
 
-url             The URL of the RSS/ATOM feed.
-                 Example: http://www.example.tld/feed.xml
-                          https://www.example.tld/feed.xml
-                          http://username:password@www.example.tld/feed.xml
-
-channels        List of channels the feed (and trigger) are to be active in.
-                  (Use space to separate multiple channels)
-
-database        Full (or relative from your eggdrops path) path to where you
-                  want to store the database file.
-                 Example: ./scripts/feedname.db
-
-output           The format you would like the RSS to be outputted to you
-                  channel in.
-
-max-depth        Maximum amount of times the script should follow Location:
-                  headers. Keep this relatively low.
-                 Default: 5
-
-timeout          Timeout of connections (in milliseconds).
-                 Default: 60000
-
-user-agent       User agent to send in the http request.
-
-announce-type    How you want the announce updates to be sent to your
-                  channels.
-                  Options:
-                   0 = Message Channel
-                   1 = Notice Channel
-                 Default: 0
-
-announce-output  Maximum articles to output to channel on announce. Setting this
-                  to 0 will silence the automatic output.
-                 Default: 3
-
-trigger-type     How you want the trigger replies to be sent when triggered
-                  both in channel and via private message.
-                  The format is: <channel>:<privmsg>
-                  Options:
-                   0 = Message Channel
-                   1 = Notice Channel
-                   2 = Message User
-                   3 = Notice User
-                 Default: 0:2
-
-trigger-output   Maximum articles to output when triggered. Setting this to 0 will
-                  silence the trigger output.
-                 Default: 3
-
-update-interval  How often (in minutes) you want the feed to be checked. Try
-                  and keep this number sensible, something above 15 minutes.
-                  Some websites will ban you for hammering their feeds.
-                 Default: 30
-
-Optional values:
-
-https-allow-legacy
-                Aktiviert bei Bedarf TLS 1.0/1.1, wenn moderne Protokolle nicht verfügbar sind. Das Skript protokolliert eine
-                Warnung, sobald auf Legacy-Mode zurückgefallen wird.
-                Default: 0 (modernes TLS erzwingen)
-
-trigger          Public trigger to list feeds. (if you only want to define it
-                  once in default use @@feedid@@, this will be replaced by
-                  each individual feeds id)
-
-evaluate-tcl     Evaluate the output before sending it to channel.
-                 Default: 0 (Off)
-
-enable-gzip      Enable gzip decompression for this feed.
-                 Default: 0 (Off)
-
-remove-empty     Remove empty cookies from the output.
-                 Default: 1 (On)
-
-output-order     The order you want the articles to be announced in channel.
-                 Options:
-                  0 = Ascending (Oldest -> Newest)
-                  1 = Descending (Newest -> Oldest)
-
-charset          This is the charset you want the feed to be outputted using.
-                  The default charset is what your local system charset is set
-                  to use. In most cases, if you're having problems with output
-                  just use utf-8.
-                 Example: utf-8
-                          cp1251
-                          iso8859-1
-feedencoding 	This is the charset the feed is in. (look in the sourcecode 
-                it is usualy mentioned in the <?xml> header. Please note that
-				Tcl uses other encoding names, esp. the Windows-xxx encodings.
-				In Tcl they are named cpxxx.
-				
-
-Cookies:
-
-  Output works on a cookie system, in this case its dynamic so it depends on
-   what data the feed contains as to what you can output.
-
-  As of version 0.3 you are able to reference any tag within each article, or
-   if you really want the whole feed. The format is @@<tag>!<subtag>!...@@,
-   @@item@@ and @@entry@@ cookies are 'shortcuts' and will always point to the
-   current article. If you wish to output an attribute of a tag you can do that
-   by using the attribute name with an = in front of it
-   (eg: @@entry!link!=href@@). This would get the 'href' attribute from the
-   <link> tag. Refer to rss-synd.tcl for more examples.
+- Seit Version 0.3 kannst du auf beliebige Tags innerhalb eines Artikels oder des gesamten Feeds zugreifen. Verwende das Muster `@@<tag>!<subtag>!...@@`; die Cookies `@@item@@` und `@@entry@@` zeigen stets auf den aktuellen Artikel.
+- Attribute eines Tags lassen sich über `=<attribut>` ausgeben, z. B. `@@entry!link!=href@@` für das `href`-Attribut des `<link>`-Tags.
+- Weitere Beispiele findest du direkt in `rss_synd.tcl`.
