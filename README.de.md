@@ -43,7 +43,7 @@ Die folgenden Optionen kannst du global in der Default-Konfiguration oder pro Fe
 | `output` | Nachrichtenformat mit Cookies für Ankündigungen. | `[\002@@channel!title@@@@title@@\002] @@item!title@@@@entry!title@@ - @@item!link@@@@entry!link!=href@@` | `[\002@@channel!title@@\002] @@item!title@@ – @@item!link@@` |
 | `max-depth` | Maximale Anzahl erlaubter HTTP-Weiterleitungen. | `5` | `3` |
 | `timeout` | Verbindungs-Timeout in Millisekunden. | `60000` | `45000` |
-| `user-agent` | HTTP User-Agent-Header. | `Mozilla/5.0 (Windows; U; Windows NT 6.1; en-GB; rv:1.9.2.2) Gecko/20100316 Firefox/3.6.2` | `rss-synd/git-198a7a4 (+https://example.tld)` |
+| `user-agent` | HTTP-User-Agent-Header; akzeptiert einen statischen String oder eine Tcl-Liste von Kandidaten. Mit `user-agent-rotate` lässt sich eine Rotation (z. B. Listen-Round-Robin oder eine eigene Funktion) aktivieren. | Rotierende Liste aktueller Desktop- und Mobil-Browser-Kennungen (siehe unten) | `Statisch: Mozilla/5.0 (compatible; rss-synd/2025.10; +https://example.tld)`<br>`Rotierend: {"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36" "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"} + user-agent-rotate list` |
 | `announce-type` | Modus für automatische Ankündigungen (`0` = Channel-Message, `1` = Channel-Notice). | `0` | `1` |
 | `announce-output` | Anzahl Artikel pro Ankündigung (`0` deaktiviert). | `3` | `5` |
 | `trigger-type` | Ausgabeformat für Trigger `<channel>:<privmsg>` (`0/1` für Channel, `2/3` für User). | `0:2` | `1:3` |
@@ -54,6 +54,7 @@ Die folgenden Optionen kannst du global in der Default-Konfiguration oder pro Fe
 | Option | Beschreibung | Standard | Beispiel |
 | --- | --- | --- | --- |
 | `https-allow-legacy` | Erlaubt TLS 1.0/1.1 als Fallback (unsicher). | `0` | `1` |
+| `user-agent-rotate` | Rotationsstrategie für den User-Agent: `list` aktiviert das eingebaute Round-Robin, alternativ kann der Name einer Prozedur angegeben werden, die den nächsten Eintrag liefert. Der Aufruf erhält Feed-Namen und aktuelle Einstellungen und darf einen String oder ein Dict mit `user-agent` plus Zusatzwerten zurückgeben. | `list` | `list` / `::mein::ua::next` |
 | `trigger` | Öffentlicher Triggertext; `@@feedid@@` wird durch die Feed-ID ersetzt. | `!rss @@feedid@@` | `!news @@feedid@@` |
 | `evaluate-tcl` | Führt Ausgaben vor dem Senden als Tcl aus. | `0` | `1` |
 | `enable-gzip` | Aktiviert Gzip-Dekomprimierung für Feeds. | `0` | `1` |
@@ -61,6 +62,24 @@ Die folgenden Optionen kannst du global in der Default-Konfiguration oder pro Fe
 | `output-order` | Reihenfolge der Artikel (`0` = älteste→neueste, `1` = neueste→älteste). | `0` | `1` |
 | `charset` | Zielzeichensatz für Nachrichten. | Systemstandard | `utf-8` |
 | `feedencoding` | Erzwingt einen Zeichensatz beim Einlesen des Feeds. | – | `cp1251` |
+
+### Vorkonfigurierte User-Agent-Rotation
+
+Die Standardkonfiguration bringt eine kuratierte Auswahl aktueller (Mitte 2025) Browser-Kennungen für wichtige Desktop- und Mobil-Plattformen mit:
+
+```tcl
+{
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
+    "Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro Build/AP2A.240605.024) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.6533.72 Mobile Safari/537.36"
+    "Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
+}
+```
+
+Du kannst die Liste jederzeit anpassen, eigene Marken ergänzen oder wieder auf einen einzelnen Header umstellen, indem du einen String hinterlegst und `user-agent-rotate` leerst.
 
 ### Cookies
 | Cookie | Bedeutung | Beispiel |
@@ -95,7 +114,16 @@ namespace eval ::rss-synd {
         "channels"              "#channel"
         "trigger"               "!rss @@feedid@@"
         "output"                "[\002@@channel!title@@@@title@@\002] @@item!title@@@@entry!title@@ - @@item!link@@@@entry!link!=href@@"
-        "user-agent"            "Mozilla/5.0 (Windows; U; Windows NT 6.1; en-GB; rv:1.9.2.2) Gecko/20100316 Firefox/3.6.2"
+        "user-agent"            {
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
+            "Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
+            "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro Build/AP2A.240605.024) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.6533.72 Mobile Safari/537.36"
+            "Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
+        }
+        "user-agent-rotate"    "list"
         "https-allow-legacy"    0
     }
 }

@@ -8,10 +8,31 @@ proc botonchan {chan} { return 1 }
 proc is_utf8_patched {} { return 0 }
 proc bind {args} {}
 proc unbind {args} {}
+proc unixtime {} { clock seconds }
 
 set here [file dirname [info script]]
 namespace eval ::rss-synd {}
 source [file join $here .. rss_synd.tcl]
+
+namespace eval ::http {
+    variable lastUserAgents {}
+    variable tokenCounter 0
+
+    proc config {args} {
+        variable lastUserAgents
+        set index [lsearch -exact $args "-useragent"]
+        if {$index >= 0} {
+            lappend lastUserAgents [lindex $args [expr {$index + 1}]]
+        }
+        return {}
+    }
+
+    proc geturl {url args} {
+        variable tokenCounter
+        incr tokenCounter
+        return "token$tokenCounter"
+    }
+}
 
 namespace eval ::rss-synd { variable packages }
 
@@ -78,5 +99,80 @@ test xml_list_create_partial_range {Teilbereiche werden korrekt geparst} -body {
     set children [::rss-synd::xml_get_info $partial [list 0 entry] children]
     ::rss-synd::xml_list_flatten $children
 } -result "B"
+
+set savedRss {}
+
+test feed_get_rotates_user_agent_list {User-Agent-Rotation liefert unterschiedliche Werte} -setup {
+    set savedRss [namespace eval ::rss-synd { array get rss }]
+    namespace eval ::rss-synd { array set rss {} }
+    namespace eval ::rss-synd {
+        variable rss
+        set rss(rotation-test) [list \
+            "user-agent" {"Agent/1.0" "Agent/2.0" "Agent/3.0"} \
+            "user-agent-rotate" "list" \
+            "announce-type" 0 \
+            "update-interval" 0 \
+            "timeout" 1000 \
+            "url" "http://example.test/feed" \
+            "url-auth" "" \
+            "updated" 0 \
+        ]
+    }
+    namespace eval ::http {
+        set lastUserAgents {}
+        set tokenCounter 0
+    }
+} -body {
+    for {set idx 0} {$idx < 3} {incr idx} {
+        namespace eval ::rss-synd {
+            array set tmp $rss(rotation-test)
+            set tmp(updated) 0
+            set rss(rotation-test) [array get tmp]
+            unset tmp
+        }
+        ::rss-synd::feed_get
+    }
+    namespace eval ::http { set lastUserAgents }
+} -cleanup {
+    namespace eval ::rss-synd {
+        array set rss {}
+    }
+    if {[llength $savedRss] > 0} {
+        namespace eval ::rss-synd { array set rss $savedRss }
+    }
+    namespace eval ::http {
+        set lastUserAgents {}
+        set tokenCounter 0
+    }
+} -result {Agent/1.0 Agent/2.0 Agent/3.0}
+
+test next_user_agent_without_rotation_returns_first_value {Ohne Rotation wird der erste Eintrag genutzt} -body {
+    array set feed {user-agent {"Agent/1" "Agent/2"}}
+    set first [::rss-synd::next_user_agent sample feed]
+    list $first [info exists feed(user-agent-rotate-index)] [info exists feed(user-agent-last)]
+} -cleanup {
+    catch {unset feed}
+} -result {Agent/1 0 1}
+
+test next_user_agent_custom_command_updates_state {Benutzerdefinierte Rotation kann Status hinterlegen} -setup {
+    namespace eval ::uaTest {
+        variable idx 0
+        proc next {feedName settings} {
+            variable idx
+            incr idx
+            return [dict create user-agent [format "CmdUA/%d" $idx] user-agent-rotate-index $idx]
+        }
+    }
+} -body {
+    array set feed {user-agent "Fallback/0" user-agent-rotate ::uaTest::next}
+    set first [::rss-synd::next_user_agent cmd feed]
+    set state1 [list $first $feed(user-agent-rotate-index)]
+    set second [::rss-synd::next_user_agent cmd feed]
+    set state2 [list $second $feed(user-agent-rotate-index)]
+    list $state1 $state2
+} -cleanup {
+    catch {namespace delete ::uaTest}
+    catch {unset feed}
+} -result {{CmdUA/1 1} {CmdUA/2 2}}
 
 cleanupTests
