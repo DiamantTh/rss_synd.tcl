@@ -1,0 +1,82 @@
+package require tcltest 2
+namespace import ::tcltest::*
+
+# Stubs für Eggdrop-spezifische Funktionen
+proc putlog {args} {}
+proc putserv {args} {}
+proc botonchan {chan} { return 1 }
+proc is_utf8_patched {} { return 0 }
+proc bind {args} {}
+proc unbind {args} {}
+
+set here [file dirname [info script]]
+namespace eval ::rss-synd {}
+source [file join $here .. rss_synd.tcl]
+
+namespace eval ::rss-synd { variable packages }
+
+set sampleFeed {<rss><channel><title>Demo</title><item><title>Erster</title></item><item><title>Zweiter</title></item><item><title>Dritter</title></item></channel></rss>}
+
+set parsedFeed [::rss-synd::xml_list_create $sampleFeed]
+array set feed {}
+set feed(announce-output) 2
+set feed(trigger-output) 3
+::rss-synd::feed_info $parsedFeed feed
+
+# Test: xml_list_create kann Werte korrekt auslesen
+set titlePath [::rss-synd::xml_join_tags $feed(tag-feed) $feed(tag-list) 1 $feed(tag-name) 0 title]
+
+test xml_list_create_extracts_second_title {Der zweite Item-Titel kann gelesen werden} -body {
+    set titleChildren [::rss-synd::xml_get_info $parsedFeed $titlePath children]
+    ::rss-synd::xml_list_flatten $titleChildren
+} -result "Zweiter"
+
+# Test: feed_trim begrenzt Items auf gewünschte Anzahl
+set trimmedFeed [::rss-synd::feed_trim $parsedFeed feed 2]
+set countPath [::rss-synd::xml_join_tags $feed(tag-feed) $feed(tag-list) -1 $feed(tag-name)]
+
+test feed_trim_limits_items {feed_trim reduziert die Item-Anzahl} -body {
+    ::rss-synd::xml_get_info $trimmedFeed $countPath
+} -result 2
+
+# Test: Metadaten wie der Kanal-Titel bleiben nach dem Trimmen erhalten
+set channelTitlePath [::rss-synd::xml_join_tags $feed(tag-feed) 0 channel 0 title]
+
+test feed_trim_keeps_channel_title {Kanal-Titel bleibt nach dem Trimmen verfügbar} -body {
+    set channelChildren [::rss-synd::xml_get_info $trimmedFeed $channelTitlePath children]
+    ::rss-synd::xml_list_flatten $channelChildren
+} -result "Demo"
+
+# Test: resolve_redirect löst relative Pfade korrekt auf
+if {[catch {package require uri}]} {
+    puts "Warnung: uri-Paket nicht verfügbar, Redirect-Test übersprungen"
+} else {
+    namespace eval ::rss-synd { set packages(uri) 0 }
+    test resolve_redirect_relative {Relative Redirects werden korrekt aufgelöst} -body {
+        ::rss-synd::resolve_redirect "http://example.com/path/feed" "../other.xml"
+    } -result "http://example.com/other.xml"
+}
+
+test resolve_redirect_fallback {Fallback-Auflösung ohne uri-Paket funktioniert} -body {
+    namespace eval ::rss-synd { set packages(uri) 1 }
+    ::rss-synd::resolve_redirect "http://example.com/base/index" "relative.xml"
+} -result "http://example.com/base/relative.xml"
+
+test resolve_redirect_fallback_parent {Fallback-Auflösung unterstützt '..'} -body {
+    namespace eval ::rss-synd { set packages(uri) 1 }
+    ::rss-synd::resolve_redirect "http://example.com/base/dir/index" "../next.xml"
+} -result "http://example.com/base/next.xml"
+
+# Test: xml_list_create kann auf Teilbereiche beschränkt werden
+set childXml "<root><entry>A</entry><entry>B</entry></root>"
+set startIndex [string first "<entry>B" $childXml]
+set endIndex [string first "</entry>" $childXml $startIndex]
+set endIndex [expr {$endIndex + [string length "</entry>"] - 1}]
+set partial [::rss-synd::xml_list_create $childXml $startIndex $endIndex]
+
+test xml_list_create_partial_range {Teilbereiche werden korrekt geparst} -body {
+    set children [::rss-synd::xml_get_info $partial [list 0 entry] children]
+    ::rss-synd::xml_list_flatten $children
+} -result "B"
+
+cleanupTests

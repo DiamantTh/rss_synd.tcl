@@ -43,7 +43,7 @@ Die folgenden Optionen kannst du global in der Default-Konfiguration oder pro Fe
 | `output` | Nachrichtenformat mit Cookies für Ankündigungen. | `[\002@@channel!title@@@@title@@\002] @@item!title@@@@entry!title@@ - @@item!link@@@@entry!link!=href@@` | `[\002@@channel!title@@\002] @@item!title@@ – @@item!link@@` |
 | `max-depth` | Maximale Anzahl erlaubter HTTP-Weiterleitungen. | `5` | `3` |
 | `timeout` | Verbindungs-Timeout in Millisekunden. | `60000` | `45000` |
-| `user-agent` | HTTP User-Agent-Header. | `Mozilla/5.0 (Windows; U; Windows NT 6.1; en-GB; rv:1.9.2.2) Gecko/20100316 Firefox/3.6.2` | `rss-synd/0.5.1 (+https://example.tld)` |
+| `user-agent` | HTTP User-Agent-Header. | `Mozilla/5.0 (Windows; U; Windows NT 6.1; en-GB; rv:1.9.2.2) Gecko/20100316 Firefox/3.6.2` | `rss-synd/git-198a7a4 (+https://example.tld)` |
 | `announce-type` | Modus für automatische Ankündigungen (`0` = Channel-Message, `1` = Channel-Notice). | `0` | `1` |
 | `announce-output` | Anzahl Artikel pro Ankündigung (`0` deaktiviert). | `3` | `5` |
 | `trigger-type` | Ausgabeformat für Trigger `<channel>:<privmsg>` (`0/1` für Channel, `2/3` für User). | `0:2` | `1:3` |
@@ -102,6 +102,6 @@ namespace eval ::rss-synd {
 ```
 
 ## Kompatibilität & Versionen
-- Skriptversion 0.5.1 vom 07.11.2014. Die Versionsinformationen findest du direkt im Kopfbereich von `rss_synd.tcl`.
+- Skriptversion git-198a7a4 vom 03.10.2025. Die Versionsinformationen findest du direkt im Kopfbereich von `rss_synd.tcl`.
 - Benötigt einen Eggdrop mit Tcl-Unterstützung und dem Standardpaket `http`; optionale Features setzen `base64`, `tls` und `Trf` voraus (`package require …` in `rss_synd.tcl`).
 - Für HTTPS-Verbindungen initialisiert das Skript standardmäßig TLS 1.2/1.3 und registriert eigene TLS-Sockets; über `https-allow-legacy` kannst du bei Bedarf ältere Protokolle freischalten.
