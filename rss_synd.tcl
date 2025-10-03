@@ -8,10 +8,10 @@
 # Author: Pho3niX
 # Link: https://github.com/MICE07/rss_synd.tcl
 # Tags: rss, atom, syndication
-# Updated: 07-Nov-2014
+# Updated: 03-Oct-2025
 #
 # -*- tab-width: 4; indent-tabs-mode: t; -*-
-# rss-synd.tcl -- 0.5.1
+# rss-synd.tcl -- git-198a7a4
 
 #
 # Include Settings
@@ -93,8 +93,8 @@ proc ::rss-synd::init {args} {
 	variable version
 	variable packages
 
-	set version(number)	0.5.1
-	set version(date)	"2014-11-07"
+	set version(number)	git-198a7a4
+	set version(date)	"2025-10-03"
 
         package require http
         set packages(base64) [catch {package require base64}]; # http auth
