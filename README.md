@@ -22,6 +22,8 @@ Dependencies (for additional features)
 * HTTPS
 ** Requires: TLS package to be installed.
 ** Debian: apt-get install tcl-tls
+** Hinweis: Zertifikate werden nun standardmäßig geprüft und es werden nur TLS 1.2/1.3 aktiviert. Falls deine Umgebung nur ältere
+   Protokolle unterstützt, setze die Option `https-allow-legacy` auf 1 (unsicher, nur für Notfälle).
 
 * Gzip Decompression:
 ** Requires: Trf package to be installed.
@@ -93,6 +95,11 @@ update-interval  How often (in minutes) you want the feed to be checked. Try
                  Default: 30
 
 Optional values:
+
+https-allow-legacy
+                Aktiviert bei Bedarf TLS 1.0/1.1, wenn moderne Protokolle nicht verfügbar sind. Das Skript protokolliert eine
+                Warnung, sobald auf Legacy-Mode zurückgefallen wird.
+                Default: 0 (modernes TLS erzwingen)
 
 trigger          Public trigger to list feeds. (if you only want to define it
                   once in default use @@feedid@@, this will be replaced by

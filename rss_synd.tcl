@@ -21,6 +21,72 @@ if {[catch {source scripts/rss-synd-settings.tcl} err]} {
   putlog "Error: Could not load 'rss-synd-settings.tcl file.'";
 }
 
+proc ::rss-synd::tls_socket {args} {
+	variable tls
+	if {[catch {::tls::socket {*}$args} socket options]} {
+		putlog "\002RSS Warnung\002: TLS-Verbindung fehlgeschlagen: $socket"
+		error $socket
+	}
+	return $socket
+}
+
+proc ::rss-synd::normalize_tls_options {options} {
+	set normalized {}
+	foreach {key value} $options {
+		if {[string match "-tls1_*" $key]} {
+			set key [string map {"-tls1_" "-tls1."} $key]
+		}
+		lappend normalized $key $value
+	}
+	return $normalized
+}
+
+proc ::rss-synd::setup_tls {{settingsList {}}} {
+	variable tls
+	array set settings $settingsList
+	set allowLegacy [expr {[info exists settings(https-allow-legacy)] ? $settings(https-allow-legacy) : 0}]
+	if {[info exists tls(configured)] && $tls(configured) && [info exists tls(allowLegacy)] && $tls(allowLegacy) == $allowLegacy} {
+		return 1
+	}
+	set baseOptions [list -require 1 -autoservername 1 -ssl2 0 -ssl3 0 -tls1 0 -tls1_1 0 -tls1_2 1]
+	set modernOptions [concat $baseOptions [list -tls1_3 1]]
+	set tls(configured) 0
+	set optionsNormalized 0
+	set modernResult [catch {::tls::init {*}$modernOptions} modernErr]
+	if {$modernResult != 0} {
+		if {[string match "*bad option*" $modernErr] || [string match "*unknown option*" $modernErr]} {
+			set baseOptions [::rss-synd::normalize_tls_options $baseOptions]
+			set modernOptions [::rss-synd::normalize_tls_options $modernOptions]
+			set optionsNormalized 1
+			set modernResult [catch {::tls::init {*}$modernOptions} modernErr]
+		}
+	}
+	if {$modernResult != 0} {
+		putlog "\002RSS Fehler\002: TLS-Initialisierung (TLS 1.2/1.3) fehlgeschlagen: $modernErr"
+		if {!$allowLegacy} {
+			putlog "\002RSS Hinweis\002: Aktiviere 'https-allow-legacy' in den Einstellungen, um ältere Protokolle zu erlauben."
+			return 0
+		}
+		set legacyOptions [list -require 1 -autoservername 1 -ssl2 0 -ssl3 0 -tls1 1 -tls1_1 1 -tls1_2 1]
+		if {$optionsNormalized} {
+			set legacyOptions [::rss-synd::normalize_tls_options $legacyOptions]
+		}
+		if {[catch {::tls::init {*}$legacyOptions} legacyErr]} {
+			putlog "\002RSS Fehler\002: TLS-Initialisierung im Legacy-Modus fehlgeschlagen: $legacyErr"
+			return 0
+		}
+		putlog "\002RSS Warnung\002: TLS nutzt Legacy-Protokolle, weil moderne Modi nicht unterstützt werden."
+	}
+	catch {::http::unregister https}
+	if {[catch {::http::register https 443 [list ::rss-synd::tls_socket]} registerErr]} {
+		putlog "\002RSS Fehler\002: HTTPS-Registrierung fehlgeschlagen: $registerErr"
+		return 0
+	}
+	set tls(configured) 1
+	set tls(allowLegacy) $allowLegacy
+	return 1
+}
+
 proc ::rss-synd::init {args} {
 	variable rss
 	variable default
@@ -30,14 +96,14 @@ proc ::rss-synd::init {args} {
 	set version(number)	0.5.1
 	set version(date)	"2014-11-07"
 
-	package require http
-	set packages(base64) [catch {package require base64}]; # http auth
-	set packages(tls) [catch {package require tls}]; # https
-	set packages(trf) [catch {package require Trf}]; # gzip compression
+        package require http
+        set packages(base64) [catch {package require base64}]; # http auth
+        set packages(tls) [catch {package require tls}]; # https
+        set packages(trf) [catch {package require Trf}]; # gzip compression
 
-	foreach feed [array names rss] {
-		array set tmp $default
-		array set tmp $rss($feed)
+        foreach feed [array names rss] {
+                array set tmp $default
+                array set tmp $rss($feed)
 
 		set required [list "announce-output" "trigger-output" "max-depth" "update-interval" "timeout" "channels" "output" "user-agent" "url" "database" "trigger-type" "announce-type"]
 		foreach {key value} [array get tmp] {
@@ -59,15 +125,19 @@ proc ::rss-synd::init {args} {
 
 			set tmp(url) "[lindex $ulist 1]://[lindex $ulist 3]"
 
-			if {[lindex $ulist 1] == "https"} {
-				if {$packages(tls) != 0} {
-					putlog "\002RSS Error\002: Unable to find tls package required for https, unloaded feed \"$feed\"."
-					unset rss($feed)
-					continue
-				}
+                        if {[lindex $ulist 1] == "https"} {
+                                if {$packages(tls) != 0} {
+                                        putlog "\002RSS Error\002: Unable to find tls package required for https, unloaded feed \"$feed\"."
+                                        unset rss($feed)
+                                        continue
+                                }
 
-				::http::register https 443 [list ::tls::socket -ssl3 0 -tls1 1]
-			}
+                                if {![::rss-synd::setup_tls [array get tmp]]} {
+                                        putlog "\002RSS Error\002: TLS-Konfiguration für Feed \"$feed\" fehlgeschlagen. HTTPS wird deaktiviert."
+                                        unset rss($feed)
+                                        continue
+                                }
+                        }
 
 			if {(![info exists tmp(url-auth)]) || ($tmp(url-auth) == "")} {
 				set tmp(url-auth) ""

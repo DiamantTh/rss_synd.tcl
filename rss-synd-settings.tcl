@@ -107,6 +107,7 @@ set rss(msbulletins) {
 		"trigger"			"!rss @@feedid@@"
 		"output"			"\[\002@@channel!title@@@@title@@\002\] @@item!title@@@@entry!title@@ - @@item!link@@@@entry!link!=href@@"
 		"user-agent"			"Mozilla/5.0 (Windows; U; Windows NT 6.1; en-GB; rv:1.9.2.2) Gecko/20100316 Firefox/3.6.2"
+		"https-allow-legacy"		0
 	}
 }
 
