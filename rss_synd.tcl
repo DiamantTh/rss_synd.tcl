@@ -295,8 +295,8 @@ proc ::rss-synd::feed_callback {feedlist args} {
 	if {([::http::ncode $token] == 302) || ([::http::ncode $token] == 301)} {
 		set feed(depth) [expr {$feed(depth) + 1 }]
 
-		if {$feed(depth) < $feed(max-depth)} {
-			catch {::http::geturl "$meta(Location)" -command "[namespace current]::feed_callback {$feedlist}" -timeout $feed(timeout) -headers $feed(headers)}
+                if {$feed(depth) < $feed(max-depth)} {
+                        catch {::http::geturl "$meta(Location)" -command "[namespace current]::feed_callback {[array get feed]}" -timeout $feed(timeout) -headers $feed(headers)}
 		} else {
 			putlog "\002RSS HTTP Error\002: $state(url) (State: timeout, max refer limit reached)"
 		}
