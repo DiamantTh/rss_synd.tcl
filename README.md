@@ -14,11 +14,15 @@ Das Skript `rss_synd.tcl` erweitert Eggdrop-Bots um die Möglichkeit, RSS- und A
 2. Ergänze deine `eggdrop.conf` um die Zeile `source scripts/rss-synd.tcl` (Pfad ggf. anpassen).
 
 ### Paketinstallation (optionale Features)
-| Feature | Benötigtes Paket | Debian/Ubuntu |
-|---------|------------------|----------------|
-| HTTP-Authentifizierung | `tcllib` (Base64) | `sudo apt-get install tcllib` |
-| HTTPS-Unterstützung | `tcl-tls` | `sudo apt-get install tcl-tls` |
-| Gzip-Dekomprimierung | `tcl-trf` | `sudo apt-get install tcl-trf` |
+Die folgenden optionalen Funktionen erfordern zusätzliche Tcl-Erweiterungen:
+
+| Feature | Benötigte Tcl-Erweiterungen |
+|---------|-----------------------------|
+| HTTP-Authentifizierung | `base64` aus `tcllib` |
+| HTTPS-Unterstützung | `tls` |
+| Gzip-Dekomprimierung | `Trf` |
+
+Installiere die benötigten Erweiterungen je nach Plattform über den jeweiligen Paketmanager, vorgefertigte Tcl-Pakete oder verfügbare Community-Repositorien.
 
 ## Abhängigkeiten und Hinweise
 Das Skript läuft ohne zusätzliche Pakete, jedoch sind bestimmte Funktionen nur mit den oben aufgeführten Erweiterungen verfügbar.
