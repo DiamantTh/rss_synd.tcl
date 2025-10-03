@@ -100,6 +100,7 @@ proc ::rss-synd::init {args} {
         set packages(base64) [catch {package require base64}]; # http auth
         set packages(tls) [catch {package require tls}]; # https
         set packages(trf) [catch {package require Trf}]; # gzip compression
+        set packages(uri) [catch {package require uri}]; # URL-Auflösung
 
         foreach feed [array names rss] {
                 array set tmp $default
@@ -336,11 +337,16 @@ proc ::rss-synd::feed_get {args} {
 				lappend feed(headers) "Accept-Encoding" "gzip"
 			}
 
-			catch {::http::geturl "$feed(url)" -command "[namespace current]::feed_callback {[array get feed] depth 0}" -timeout $feed(timeout) -headers $feed(headers)} debug
+                        set getResult [catch {::http::geturl "$feed(url)" -command "[namespace current]::feed_callback {[array get feed] depth 0}" -timeout $feed(timeout) -headers $feed(headers)} token]
 
-			set feed(updated) [unixtime]
-			set rss($name) [array get feed]
-			incr i
+                        if {$getResult != 0} {
+                                putlog "\002RSS HTTP Fehler\002: Anfrage für \"$feed(url)\" konnte nicht gestartet werden: $token"
+                                continue
+                        }
+
+                        set feed(updated) [unixtime]
+                        set rss($name) [array get feed]
+                        incr i
 		}
 
 		unset feed
@@ -348,8 +354,9 @@ proc ::rss-synd::feed_get {args} {
 }
 
 proc ::rss-synd::feed_callback {feedlist args} {
-	set token [lindex $args end]
-	array set feed $feedlist
+        set token [lindex $args end]
+        array set feed $feedlist
+        variable packages
 
 	upvar 0 $token state
 
@@ -362,14 +369,26 @@ proc ::rss-synd::feed_callback {feedlist args} {
 
 	array set meta $state(meta)
 
-	if {([::http::ncode $token] == 302) || ([::http::ncode $token] == 301)} {
-		set feed(depth) [expr {$feed(depth) + 1 }]
+        if {([::http::ncode $token] == 302) || ([::http::ncode $token] == 301)} {
+                set feed(depth) [expr {$feed(depth) + 1 }]
 
                 if {$feed(depth) < $feed(max-depth)} {
-                        catch {::http::geturl "$meta(Location)" -command "[namespace current]::feed_callback {[array get feed]}" -timeout $feed(timeout) -headers $feed(headers)}
-		} else {
-			putlog "\002RSS HTTP Error\002: $state(url) (State: timeout, max refer limit reached)"
-		}
+                        if {![info exists meta(Location)] || $meta(Location) eq ""} {
+                                putlog "\002RSS HTTP Error\002: $state(url) (State: Redirect ohne Location-Header)"
+                        } else {
+                                set base $state(url)
+                                if {[catch {set redirectUrl [[namespace current]::resolve_redirect $base $meta(Location)]} redirectErr]} {
+                                        putlog "\002RSS HTTP Error\002: Weiterleitung für \"$state(url)\" fehlgeschlagen: $redirectErr"
+                                } else {
+                                        set redirectResult [catch {::http::geturl "$redirectUrl" -command "[namespace current]::feed_callback {[array get feed]}" -timeout $feed(timeout) -headers $feed(headers)} redirectToken]
+                                        if {$redirectResult != 0} {
+                                                putlog "\002RSS HTTP Fehler\002: Weiterleitungsabruf von \"$redirectUrl\" scheiterte: $redirectToken"
+                                        }
+                                }
+                        }
+                } else {
+                        putlog "\002RSS HTTP Error\002: $state(url) (State: timeout, max refer limit reached)"
+                }
 
 		::http::cleanup $token
 		return 1
@@ -419,17 +438,24 @@ proc ::rss-synd::feed_callback {feedlist args} {
 		putlog "\002RSS Warning\002: $error."
 	}
 
-	if {![[namespace current]::feed_info $data]} {
-		putlog "\002RSS Error\002: Invalid feed format ($state(url))!"
-		::http::cleanup $token
-		return 1
-	}
+        if {![[namespace current]::feed_info $data]} {
+                putlog "\002RSS Error\002: Invalid feed format ($state(url))!"
+                ::http::cleanup $token
+                return 1
+        }
 
-	::http::cleanup $token
+        set max_items [expr {int(max($feed(announce-output), $feed(trigger-output)))}]
+        set data [[namespace current]::feed_trim $data feed $max_items]
 
-	if {[catch {[namespace current]::feed_write $data} error] != 0} {
-		putlog "\002RSS Database Error\002: $error."
-		return 1
+        if {$odata ne ""} {
+                set odata [[namespace current]::feed_trim $odata feed $max_items]
+        }
+
+        ::http::cleanup $token
+
+        if {[catch {[namespace current]::feed_write $data} error] != 0} {
+                putlog "\002RSS Database Error\002: $error."
+                return 1
 	}
 
 	if {$feed(announce-output) > 0} {
@@ -512,138 +538,326 @@ proc ::rss-synd::feed_read { } {
 }
 
 proc ::rss-synd::feed_write {data} {
-	upvar 1 feed feed
+        upvar 1 feed feed
 
-	if {[catch {open $feed(database) "w+"} fp] != 0} {
-		error $fp
-	}
+        if {[catch {open $feed(database) "w+"} fp] != 0} {
+                error $fp
+        }
 
-	set data [string map { "\n" "" "\r" "" } $data]
+        set data [string map { "\n" "" "\r" "" } $data]
 
-	puts -nonewline $fp $data
+        puts -nonewline $fp $data
 
-	close $fp
+        close $fp
+}
+
+proc ::rss-synd::feed_trim {data feedName max_items} {
+        if {$data eq ""} {
+                return $data
+        }
+
+        if {$max_items < 0} {
+                return $data
+        }
+
+        set max_items [expr {int($max_items)}]
+
+        upvar 1 $feedName feed
+
+        if {![info exists feed(tag-feed)] || ![info exists feed(tag-list)] || ![info exists feed(tag-name)]} {
+                return $data
+        }
+
+        set path [[namespace current]::xml_join_tags $feed(tag-feed) $feed(tag-list)]
+
+        return [[namespace current]::xml_trim_to_limit $data $path $feed(tag-name) $max_items]
+}
+
+proc ::rss-synd::xml_trim_to_limit {xml_list path tag_name max_items} {
+        if {$max_items < 0} {
+                return $xml_list
+        }
+
+        if {$xml_list eq ""} {
+                return $xml_list
+        }
+
+        if {[llength $path] == 0} {
+                return [[namespace current]::xml_limit_children $xml_list $tag_name $max_items]
+        }
+
+        set index_target [lindex $path 0]
+        set name_target [lindex $path 1]
+        set rest [lrange $path 2 end]
+        set match_index 0
+        set result [list]
+
+        foreach element $xml_list {
+                if {[catch {array set node $element}]} {
+                        lappend result $element
+                        continue
+                }
+
+                set should_process 0
+                if {[info exists node(name)] && [string match -nocase $name_target $node(name)]} {
+                        if {$index_target == -1 || $match_index == $index_target} {
+                                set should_process 1
+                        }
+
+                        incr match_index
+                }
+
+                if {$should_process && [info exists node(children)]} {
+                        set node(children) [[namespace current]::xml_trim_to_limit $node(children) $rest $tag_name $max_items]
+                }
+
+                lappend result [array get node]
+                unset node
+        }
+
+        return $result
+}
+
+proc ::rss-synd::xml_limit_children {xml_list tag_name max_items} {
+        if {$max_items < 0} {
+                return $xml_list
+        }
+
+        set max_items [expr {int($max_items)}]
+
+        set result [list]
+        set kept 0
+
+        foreach element $xml_list {
+                if {[catch {array set node $element}]} {
+                        lappend result $element
+                        continue
+                }
+
+                if {[info exists node(name)] && [string match -nocase $tag_name $node(name)]} {
+                        incr kept
+                        if {$kept > $max_items} {
+                                unset node
+                                continue
+                        }
+                }
+
+                lappend result [array get node]
+                unset node
+        }
+
+        return $result
+}
+
+proc ::rss-synd::resolve_redirect {base location} {
+        variable packages
+
+        if {![info exists packages(uri)]} {
+                set packages(uri) [catch {package require uri}]
+        }
+
+        if {[string match -nocase {http://*} $location] || [string match -nocase {https://*} $location]} {
+                return $location
+        }
+
+        if {![info exists base] || $base eq ""} {
+                return $location
+        }
+
+        if {[info exists packages(uri)] && $packages(uri) == 0} {
+                if {![catch {uri::resolve $base $location} resolved]} {
+                        return $resolved
+                }
+        }
+
+        # einfache Fallback-Auflösung ohne uri::resolve
+        if {[regexp -nocase {^(https?://[^/]+)(/.*)?$} $base -> prefix pathPart]} {
+                if {$location eq ""} {
+                        return $base
+                }
+
+                if {[string match "/*" $location]} {
+                        return "$prefix$location"
+                }
+
+                if {$pathPart eq ""} {
+                        set pathSegments [list ""]
+                } else {
+                        set pathSegments [split $pathPart "/"]
+                }
+
+                if {[llength $pathSegments] > 1} {
+                        set pathSegments [lrange $pathSegments 0 end-1]
+                }
+
+                foreach segment [split $location "/"] {
+                        if {$segment eq "" || $segment eq "."} {
+                                continue
+                        } elseif {$segment eq ".."} {
+                                if {[llength $pathSegments] > 1} {
+                                        set pathSegments [lrange $pathSegments 0 end-1]
+                                }
+                        } else {
+                                lappend pathSegments $segment
+                        }
+                }
+
+                set joined [join $pathSegments "/"]
+                if {$joined eq ""} {
+                        set joined "/"
+                } elseif {[string index $joined 0] ne "/"} {
+                        set joined "/$joined"
+                }
+
+                return "$prefix$joined"
+        }
+
+        return $location
 }
 
 #
 # XML Functions
 ##
 
-proc ::rss-synd::xml_list_create {xml_data} {
-	set xml_list [list]
-	set ns_current [namespace current]
+proc ::rss-synd::xml_list_create {xml_data {start 0} {end -1}} {
+        set ns_current [namespace current]
+        set xml_list [list]
 
-	set ptr 0
-	while {[set tag_start [${ns_current}::xml_get_position $xml_data $ptr]] != ""} {
-		set tag_start_first [lindex $tag_start 0]
-		set tag_start_last [lindex $tag_start 1]
+        set length [string length $xml_data]
+        if {$length == 0} {
+                return $xml_list
+        }
 
-		set tag_string [string range $xml_data $tag_start_first $tag_start_last]
+        if {$start < 0} {
+                set start 0
+        }
+        if {$end < 0 || $end >= $length} {
+                set end [expr {$length - 1}]
+        }
+        if {$start > $end} {
+                return $xml_list
+        }
 
-		# move the pointer to the next character after the current tag
-		set last_ptr $ptr
-		set ptr [expr { $tag_start_last + 2 }]
+        set ptr $start
 
-		array set tag [list]
-		# match 'special' tags that dont close
-		if {[regexp -nocase -- {^!(\[CDATA|--|DOCTYPE)} $tag_string]} {
-			set tag_data $tag_string
+        while {$ptr <= $end} {
+                set tag_start [${ns_current}::xml_get_position $xml_data $ptr $end]
+                if {$tag_start eq ""} {
+                        break
+                }
 
-			regexp -nocase -- {^!\[CDATA\[(.*?)\]\]$} $tag_string -> tag_data
-			regexp -nocase -- {^!--(.*?)--$} $tag_string -> tag_data
+                set tag_start_first [lindex $tag_start 0]
+                if {$tag_start_first > $end} {
+                        break
+                }
 
-			if {[info exists tag_data]} {
-				set tag(data) [${ns_current}::xml_escape $tag_data]
-			}
-		} else {
-			# we should only ever encounter opening tags, if we hit a closing one somethings wrong
-			if {[string match {[/]*} $tag_string]} {
-				putlog "\002RSS Malformed Feed\002: Tag not open: \"<$tag_string>\" ($tag_start_first => $tag_start_last)"
-				continue
-			}
+                set tag_start_last [lindex $tag_start 1]
 
-			# split up the tag name and attributes
-			regexp -- {(.[^ \/\n\r]*)(?: |\n|\r\n|\r|)(.*?)$} $tag_string -> tag_name tag_args
-			set tag(name) [${ns_current}::xml_escape $tag_name]
+                set data_start $ptr
+                set data_end [expr {$tag_start_first - 2}]
+                if {$data_end >= $data_start && $data_start <= $end} {
+                        if {$data_start < $start} {
+                                set data_start $start
+                        }
+                        if {$data_end > $end} {
+                                set data_end $end
+                        }
+                        if {$data_end >= $data_start} {
+                                lappend xml_list [list "data" [${ns_current}::xml_escape [string range $xml_data $data_start $data_end]]]
+                        }
+                }
 
-			# split up all of the tags attributes
-			set tag(attrib) [list]
-			if {[string length $tag_args] > 0} {
-				set values [regexp -inline -all -- {(?:\s*|)(.[^=]*)=["'](.[^"']*)["']} $tag_args]
+                set tag_string [string range $xml_data $tag_start_first $tag_start_last]
+                set ptr [expr {$tag_start_last + 2}]
+                array set tag [list]
 
-				foreach {r_match r_tag r_value} $values {
-					lappend tag(attrib) [${ns_current}::xml_escape $r_tag] [${ns_current}::xml_escape $r_value]
-				}
-			}
+                if {[regexp -nocase -- {^!(\[CDATA|--|DOCTYPE)} $tag_string]} {
+                        set tag_data $tag_string
 
-			# find the end tag of non-self-closing tags
-			if {(![regexp {(\?|!|/)(\s*)$} $tag_args]) || \
-			    (![string match "\?*" $tag_string])} {
-				set tmp_num 1
-				set tag_success 0
-				set tag_end_last $ptr
+                        regexp -nocase -- {^!\[CDATA\[(.*?)\]\]$} $tag_string -> tag_data
+                        regexp -nocase -- {^!--(.*?)--$} $tag_string -> tag_data
 
-				# find the correct closing tag if there are nested elements
-				#  with the same name
-				while {$tmp_num > 0} {
-					# search for a possible closing tag
-					set tag_success [regexp -indices -start $tag_end_last -- "</$tag_name>" $xml_data tag_end]
+                        if {[info exists tag_data]} {
+                                set tag(data) [${ns_current}::xml_escape $tag_data]
+                        }
+                } else {
+                        if {[string match {[/]*} $tag_string]} {
+                                putlog "\002RSS Malformed Feed\002: Tag not open: \"<$tag_string>\" ($tag_start_first => $tag_start_last)"
+                                unset tag
+                                continue
+                        }
 
-					set last_tag_end_last $tag_end_last
+                        regexp -- {(.[^ \/\n\r]*)(?: |\n|\r\n|\r|)(.*?)$} $tag_string -> tag_name tag_args
+                        set tag(name) [${ns_current}::xml_escape $tag_name]
 
-					set tag_end_first [lindex $tag_end 0]
-					set tag_end_last [lindex $tag_end 1]
+                        set tag(attrib) [list]
+                        if {[string length $tag_args] > 0} {
+                                set values [regexp -inline -all -- {(?:\s*|)(.[^=]*)=["'](.[^"']*)["']} $tag_args]
 
-					# check to see if there are any NEW opening tags within the
-					#  previous closing tag and the new closing one
-					incr tmp_num [regexp -all -- "<$tag_name\(\[\\s\\t\\n\\r\]+\(\[^/>\]*\)?\)?>" [string range $xml_data $last_tag_end_last $tag_end_last]]
+                                foreach {r_match r_tag r_value} $values {
+                                        lappend tag(attrib) [${ns_current}::xml_escape $r_tag] [${ns_current}::xml_escape $r_value]
+                                }
+                        }
 
-					incr tmp_num -1
-				}
+                        if {(![regexp {(\?|!|/)(\s*)$} $tag_args]) || (![string match "\?*" $tag_string])} {
+                                set tmp_num 1
+                                set tag_success 0
+                                set tag_end_last $ptr
 
-				if {$tag_success == 0} {
-					putlog "\002RSS Malformed Feed\002: Tag not closed: \"<$tag_name>\""
-					return
-				}
+                                while {$tmp_num > 0} {
+                                        set tag_success [regexp -indices -start $tag_end_last -- "</$tag_name>" $xml_data tag_end]
 
-				# set the pointer to after the last closing tag
-				set ptr [expr { $tag_end_last + 1 }]
+                                        if {!$tag_success || [lindex $tag_end 0] == -1 || ([lindex $tag_end 0] > $end)} {
+                                                set tag_success 0
+                                                break
+                                        }
 
-				# remember tag_start*'s character index doesnt include the tag start and end characters
-				set xml_sub_data [string range $xml_data [expr { $tag_start_last + 2 }] [expr { $tag_end_first - 1 }]]
+                                        set last_tag_end_last $tag_end_last
 
-				# recurse the data within the currently open tag
-				set result [${ns_current}::xml_list_create $xml_sub_data]
+                                        set tag_end_first [lindex $tag_end 0]
+                                        set tag_end_last [lindex $tag_end 1]
 
-				# set the list data returned from the recursion we just performed
-				if {[llength $result] > 0} {
-					set tag(children) $result
+                                        set search_end [expr {$tag_end_last < $end ? $tag_end_last : $end}]
+                                        incr tmp_num [regexp -all -- "<$tag_name\(\[\\s\\t\\n\\r\]+\(\[^/>\]*\)?\)?>" [string range $xml_data $last_tag_end_last $search_end]]
+                                        incr tmp_num -1
+                                }
 
-				# set the current data we have because we're already at the end of a branch
-				#  (ie: the recursion didnt return any data)
-				} else {
-					set tag(data) [${ns_current}::xml_escape $xml_sub_data]
-				}
-			}
-		}
+                                if {$tag_success == 0} {
+                                        putlog "\002RSS Malformed Feed\002: Tag not closed: \"<$tag_name>\""
+                                        return
+                                }
 
-		# insert any plain data that appears before the current element
-		if {$last_ptr != [expr { $tag_start_first - 1 }]} {
-			lappend xml_list [list "data" [${ns_current}::xml_escape [string range $xml_data $last_ptr [expr { $tag_start_first - 2 }]]]]
-		}
+                                set ptr [expr {$tag_end_last + 1}]
+                                set child_start [expr {$tag_start_last + 2}]
+                                set child_end [expr {$tag_end_first - 1}]
 
-		# inset tag data
-		lappend xml_list [array get tag]
+                                if {$child_end >= $child_start} {
+                                        set result [${ns_current}::xml_list_create $xml_data $child_start $child_end]
+                                } else {
+                                        set result [list]
+                                }
 
-		unset tag
-	}
+                                if {[llength $result] > 0} {
+                                        set tag(children) $result
+                                } else {
+                                        if {$child_end >= $child_start} {
+                                                set tag(data) [${ns_current}::xml_escape [string range $xml_data $child_start $child_end]]
+                                        } else {
+                                                set tag(data) ""
+                                        }
+                                }
+                        }
+                }
 
-	# if there is still plain data left add it
-	if {$ptr < [string length $xml_data]} {
-		lappend xml_list [list "data" [${ns_current}::xml_escape [string range $xml_data $ptr end]]]
-	}
+                lappend xml_list [array get tag]
+                unset tag
+        }
 
-	return $xml_list
+        if {$ptr <= $end} {
+                lappend xml_list [list "data" [${ns_current}::xml_escape [string range $xml_data $ptr $end]]]
+        }
+
+        return $xml_list
 }
 
 # simple escape function
@@ -656,30 +870,42 @@ proc ::rss-synd::xml_escape {string} {
 # this function is to replace:
 #  regexp -indices -start $ptr {<(!\[CDATA\[.+?\]\]|!--.+?--|!DOCTYPE.+?|.+?)>} $xml_data -> tag_start
 # which doesnt work correctly with tcl's re_syntax
-proc ::rss-synd::xml_get_position {xml_data ptr} {
-	set tag_start [list -1 -1]
+proc ::rss-synd::xml_get_position {xml_data ptr {end -1}} {
+        if {$end >= 0 && $ptr > $end} {
+                return ""
+        }
 
-	regexp -indices -start $ptr {<(.+?)>} $xml_data -> tmp(tag)
-	regexp -indices -start $ptr {<(!--.*?--)>} $xml_data -> tmp(comment)
-	regexp -indices -start $ptr {<(!DOCTYPE.+?)>} $xml_data -> tmp(doctype)
-	regexp -indices -start $ptr {<(!\[CDATA\[.+?\]\])>} $xml_data -> tmp(cdata)
+        set tag_start [list -1 -1]
+        array set tmp {}
 
-	# 'tag' regexp should be compared last
-	foreach name [lsort [array names tmp]] {
-		set tmp_s [split $tmp($name)]
-		if {( ([lindex $tmp_s 0] < [lindex $tag_start 0]) && \
-		      ([lindex $tmp_s 0] > -1) ) || \
-            ([lindex $tag_start 0] == -1)} {
-			set tag_start $tmp($name)
-		}
-	}
+        regexp -indices -start $ptr {<(.+?)>} $xml_data -> tmp(tag)
+        regexp -indices -start $ptr {<(!--.*?--)>} $xml_data -> tmp(comment)
+        regexp -indices -start $ptr {<(!DOCTYPE.+?)>} $xml_data -> tmp(doctype)
+        regexp -indices -start $ptr {<(!\[CDATA\[.+?\]\])>} $xml_data -> tmp(cdata)
 
-	if {([lindex $tag_start 0] == -1) || \
-	    ([lindex $tag_start 1] == -1)}  {
-		set tag_start ""
-	}
+        foreach name [lsort [array names tmp]] {
+                set tmp_s [split $tmp($name)]
+                if {$end >= 0 && [lindex $tmp_s 0] > $end} {
+                        continue
+                }
 
-	return $tag_start
+                if {( ([lindex $tmp_s 0] < [lindex $tag_start 0]) &&
+                      ([lindex $tmp_s 0] > -1) ) ||
+                    ([lindex $tag_start 0] == -1)} {
+                        set tag_start $tmp($name)
+                }
+        }
+
+        if {([lindex $tag_start 0] == -1) ||
+            ([lindex $tag_start 1] == -1)}  {
+                return ""
+        }
+
+        if {$end >= 0 && [lindex $tag_start 1] > $end} {
+                return ""
+        }
+
+        return $tag_start
 }
 
 # recursivly flatten all data without tags or attributes
