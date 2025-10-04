@@ -12,7 +12,7 @@
 # Updated: 03-Oct-2025
 #
 # -*- tab-width: 4; indent-tabs-mode: t; -*-
-# rss-synd.tcl -- git-198a7a4
+# rss-synd.tcl -- git-7fb5cbe
 
 #
 # Logging-Hilfsfunktionen und Einstellungen
@@ -161,9 +161,12 @@ proc ::rss-synd::log_message {level text} {
 # Include Settings
 #
 
-if {[catch {source scripts/rss-synd-settings.tcl} err]} {
-::rss-synd::log_message error "Error: Could not load 'rss-synd-settings.tcl file.'"
+set settingsPath [file normalize [file join [file dirname [info script]] rss-synd-settings.tcl]]
+if {[catch {source $settingsPath} err]} {
+        ::rss-synd::log_message error "Error: Could not load settings file '$settingsPath': $err"
+        error $err
 }
+unset settingsPath
 
 proc ::rss-synd::tls_socket {args} {
 	variable tls
@@ -237,7 +240,7 @@ proc ::rss-synd::init {args} {
 	variable version
 	variable packages
 
-	set version(number)	git-198a7a4
+	set version(number)	git-7fb5cbe
 	set version(date)	"2025-10-03"
 
         package require http

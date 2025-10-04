@@ -10,6 +10,29 @@ proc bind {args} {}
 proc unbind {args} {}
 proc unixtime {} { clock seconds }
 
+namespace eval ::testhelpers {
+    variable logMessages {}
+
+    proc capture_putlog {text} {
+        variable logMessages
+        lappend logMessages $text
+    }
+
+    proc dummy_timer {args} {
+        return {}
+    }
+
+    proc reset_logs {} {
+        variable logMessages
+        set logMessages {}
+    }
+
+    proc get_logs {} {
+        variable logMessages
+        return $logMessages
+    }
+}
+
 set here [file dirname [info script]]
 namespace eval ::rss-synd {}
 source [file join $here .. rss_synd.tcl]
@@ -104,7 +127,7 @@ set savedRss {}
 
 test feed_get_rotates_user_agent_list {User-Agent-Rotation liefert unterschiedliche Werte} -setup {
     set savedRss [namespace eval ::rss-synd { array get rss }]
-    namespace eval ::rss-synd { array set rss {} }
+    namespace eval ::rss-synd { catch {array unset rss} }
     namespace eval ::rss-synd {
         variable rss
         set rss(rotation-test) [list \
@@ -134,9 +157,7 @@ test feed_get_rotates_user_agent_list {User-Agent-Rotation liefert unterschiedli
     }
     namespace eval ::http { set lastUserAgents }
 } -cleanup {
-    namespace eval ::rss-synd {
-        array set rss {}
-    }
+    namespace eval ::rss-synd { catch {array unset rss} }
     if {[llength $savedRss] > 0} {
         namespace eval ::rss-synd { array set rss $savedRss }
     }
@@ -174,5 +195,28 @@ test next_user_agent_custom_command_updates_state {Benutzerdefinierte Rotation k
     catch {namespace delete ::uaTest}
     catch {unset feed}
 } -result {{CmdUA/1 1} {CmdUA/2 2}}
+
+test settings_loading_failure_aborts_execution {Fehlende Einstellungen brechen das Laden mit aussagekräftiger Meldung ab} -setup {
+    set tmpdir [file normalize [file join $here tmp-missing-settings]]
+    file delete -force $tmpdir
+    file mkdir $tmpdir
+    set scriptPath [file normalize [file join $tmpdir rss_synd.tcl]]
+    file copy -force [file join $here .. rss_synd.tcl] $scriptPath
+    namespace eval ::testhelpers { reset_logs }
+    interp create rssFail
+    interp alias rssFail putlog {} ::testhelpers::capture_putlog
+    interp alias rssFail utimer {} ::testhelpers::dummy_timer
+    interp alias rssFail killutimer {} ::testhelpers::dummy_timer
+    set expectedPath [file normalize [file join [file dirname $scriptPath] rss-synd-settings.tcl]]
+    set expectedError [format {couldn't read file "%s": no such file or directory} $expectedPath]
+} -body {
+    set result [catch {interp eval rssFail [list source $scriptPath]} msg opts]
+    set logs [::testhelpers::get_logs]
+    set expectedLog [format "Error: Could not load settings file '%s': %s" $expectedPath $msg]
+    list $result [string equal $msg $expectedError] [llength $logs] [string equal [lindex $logs 0] $expectedLog]
+} -cleanup {
+    interp delete rssFail
+    file delete -force $tmpdir
+} -result {1 1 1 1}
 
 cleanupTests
