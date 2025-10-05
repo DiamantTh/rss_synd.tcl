@@ -85,6 +85,7 @@ The following options can be defined globally in the default configuration or pe
 | Option | Description | Default | Example |
 | --- | --- | --- | --- |
 | `https-allow-legacy` | Allows TLS 1.0/1.1 as a fallback (insecure). | `0` | `1` |
+| `debug-mode` | Enables verbose debugging. Pass a Tcl list with any of `http`, `tls`, or `all`. `http` logs outgoing request details, while `tls` activates `::tls::debug` (and logs the applied TLS options if the command is missing). | `{}` | `{http tls}` |
 | `log-mode` | Logging strategy for Eggdrop’s console output. Use `immediate` for direct `putlog` calls or `buffered` to collect messages and emit summaries. | `immediate` | `buffered` |
 | `log-interval` | Interval in minutes before buffered log summaries are flushed. Ignored when `log-mode` is `immediate`. | `5` | `10` |
 | `user-agent-rotate` | Rotation strategy for the User-Agent list: use `list` for round-robin or pass a command name that returns the next agent. The command receives the feed name and current settings and may return a string or a dict containing `user-agent` plus extra state. | `list` | `list` / `::my::ua::next` |
@@ -197,6 +198,6 @@ Eggdrop writes script output to the party line (DCC chat). To reduce noise you c
 While buffered mode is active, individual log entries are grouped and only a compact digest is sent to DCC at the chosen interval. Switching back to `immediate` restores the previous behaviour.
 
 ## Compatibility & versions
-- Script version git-4bda2c0+config-convert dated 03 Oct 2025. You can find the version information in the header of `rss_synd.tcl`.
+- Script version git-4bda2c0+debug-modes dated 04 Oct 2025. You can find the version information in the header of `rss_synd.tcl`.
 - Requires an Eggdrop with Tcl support and the standard `http` package; optional features rely on `base64`, `tls`, and `Trf` (`package require …` in `rss_synd.tcl`).
 - For HTTPS connections the script enables TLS 1.2/1.3 by default and registers its own TLS sockets; you can enable older protocols via `https-allow-legacy` if needed.
