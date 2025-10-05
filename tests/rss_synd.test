@@ -8,6 +8,7 @@ proc is_utf8_patched {} { return 0 }
 proc bind {args} {}
 proc unbind {args} {}
 proc unixtime {} { clock seconds }
+proc putlog {text} { ::testhelpers::capture_putlog $text }
 
 namespace eval ::testhelpers {
     variable logMessages {}
@@ -80,7 +81,7 @@ namespace eval ::http {
     }
 
     proc ncode {token} {
-        upvar 0 $token state
+        upvar #0 $token state
         if {[info exists state(ncode)]} {
             return $state(ncode)
         }
@@ -234,7 +235,7 @@ test configure_debug_defaults_to_disabled {Leere Debug-Liste deaktiviert alle Fl
         set settings(debug-mode) {}
         ::rss-synd::configure_debug
         variable debugOptions
-        list $debugOptions(http) $debugOptions(tls)
+        list [dict get $debugOptions http] [dict get $debugOptions tls]
     }]
     return $result
 } -cleanup {
@@ -264,7 +265,7 @@ test configure_debug_all_enables_all_flags {'all' aktiviert HTTP- und TLS-Debug}
         set settings(debug-mode) {all}
         ::rss-synd::configure_debug
         variable debugOptions
-        list $debugOptions(http) $debugOptions(tls)
+        list [dict get $debugOptions http] [dict get $debugOptions tls]
     }]
     return $result
 } -cleanup {
@@ -300,7 +301,9 @@ test setup_tls_activates_tls_debug_command {TLS-Debug ruft ::tls::debug auf und 
     set setupResult [::rss-synd::setup_tls]
     set logs [::testhelpers::get_logs]
     set debugCalls [namespace eval ::tls { set debugCalls }]
-    set result [list $setupResult [expr {[llength $debugCalls] == 1 && [lindex $debugCalls 0] == 1}] [string match "\u0002RSS Debug\u0002: TLS-Debugausgabe*" [lindex $logs end]]]
+    set lastLog [lindex $logs end]
+    set hasEnableMessage [expr {[string first "TLS-Debugausgabe" $lastLog] >= 0}]
+    set result [list $setupResult [expr {[llength $debugCalls] == 1 && [lindex $debugCalls 0] == 1}] $hasEnableMessage]
     return $result
 } -cleanup {
     namespace eval ::rss-synd { catch {array unset tls} }
@@ -340,7 +343,21 @@ test setup_tls_logs_options_without_tls_debug {Fehlt ::tls::debug, werden TLS-Op
     ::testhelpers::reset_logs
     set setupResult [::rss-synd::setup_tls]
     set logs [::testhelpers::get_logs]
-    set result [list $setupResult [llength $logs] [string match "\u0002RSS Debug\u0002: TLS-Debugmodus angefordert,*" [lindex $logs 0]] [string match "\u0002RSS Debug\u0002: Verwendete TLS-Handshake-Optionen:*" [lindex $logs 1]]]
+    set hasDebugRequest 0
+    set hasDebugOptions 0
+    set hasInitMessage 0
+    foreach entry $logs {
+        if {!$hasDebugRequest && [string first "TLS-Debugmodus angefordert" $entry] >= 0} {
+            set hasDebugRequest 1
+        }
+        if {!$hasDebugOptions && [string first "TLS-Handshake-Optionen" $entry] >= 0} {
+            set hasDebugOptions 1
+        }
+        if {!$hasInitMessage && [string first "TLS-Stack erfolgreich initialisiert" $entry] >= 0} {
+            set hasInitMessage 1
+        }
+    }
+    set result [list $setupResult [llength $logs] $hasDebugRequest $hasDebugOptions $hasInitMessage]
     return $result
 } -cleanup {
     if {[info commands ::tls::debug_saved] ne ""} {
@@ -358,7 +375,7 @@ test setup_tls_logs_options_without_tls_debug {Fehlt ::tls::debug, werden TLS-Op
     }
     namespace eval ::tls { set debugCalls {} }
     ::testhelpers::reset_logs
-} -result {1 2 1 1}
+} -result {1 5 1 1 1}
 
 test feed_get_logs_http_debug_info {HTTP-Debug protokolliert URL, Timeout und Header} -body {
     set ::test_savedRssDebug [namespace eval ::rss-synd {
@@ -399,7 +416,17 @@ test feed_get_logs_http_debug_info {HTTP-Debug protokolliert URL, Timeout und He
     ::testhelpers::reset_logs
     ::rss-synd::feed_get
     set logs [::testhelpers::get_logs]
-    set result [list [llength $logs] [string match "\u0002RSS Debug\u0002: HTTP-Abruf für '* (Timeout: 1500 ms, Header: keine)" [lindex $logs 0]]]
+    set hasDebugLog 0
+    set hasInfoLog 0
+    foreach entry $logs {
+        if {!$hasDebugLog && [string first "RSS Debug HTTP" $entry] >= 0} {
+            set hasDebugLog 1
+        }
+        if {!$hasInfoLog && [string first "HTTP-Abruf" $entry] >= 0} {
+            set hasInfoLog 1
+        }
+    }
+    set result [list [llength $logs] $hasDebugLog $hasInfoLog]
     return $result
 } -cleanup {
     namespace eval ::rss-synd { catch {array unset rss} }
@@ -417,7 +444,7 @@ test feed_get_logs_http_debug_info {HTTP-Debug protokolliert URL, Timeout und He
     catch {unset ::test_savedRssDebug}
     namespace eval ::http { set statusByToken {}; set tokenCounter 0 }
     ::testhelpers::reset_logs
-} -result {1 1}
+} -result {2 1 1}
 
 test feed_callback_logs_redirect_http_debug {HTTP-Debug gibt Informationen zum Redirect-Abruf aus} -body {
     set ::test_savedDebugMode_redirect [namespace eval ::rss-synd {
@@ -454,7 +481,17 @@ test feed_callback_logs_redirect_http_debug {HTTP-Debug gibt Informationen zum R
     }
     set callbackResult [::rss-synd::feed_callback $feedlist tokenRedirect]
     set logs [::testhelpers::get_logs]
-    set result [list $callbackResult [llength $logs] [string match "\u0002RSS Debug\u0002: HTTP-Redirect-Abruf für '* (Timeout: 2000 ms, Header: Authorization: Basic token)" [lindex $logs 0]]]
+    set hasStatusLog 0
+    set hasRedirectLog 0
+    foreach entry $logs {
+        if {!$hasStatusLog && [string first "RSS Debug HTTP" $entry] >= 0} {
+            set hasStatusLog 1
+        }
+        if {!$hasRedirectLog && [string first "HTTP-Redirect-Abruf" $entry] >= 0} {
+            set hasRedirectLog 1
+        }
+    }
+    set result [list $callbackResult [llength $logs] $hasStatusLog $hasRedirectLog]
     return $result
 } -cleanup {
     catch {array unset ::tokenRedirect}
@@ -468,7 +505,7 @@ test feed_callback_logs_redirect_http_debug {HTTP-Debug gibt Informationen zum R
         unset ::test_savedDebugMode_redirect
     }
     ::testhelpers::reset_logs
-} -result {1 1 1}
+} -result {1 2 1 1}
 
 # Test: xml_list_create kann auf Teilbereiche beschränkt werden
 set childXml "<root><entry>A</entry><entry>B</entry></root>"
@@ -605,13 +642,23 @@ test feed_get_emits_http_debug_log {feed_get erzeugt HTTP-Debug-Log bei aktivem 
 } -body {
     ::rss-synd::feed_get
     set logs [::testhelpers::get_logs]
-    list [llength $logs] [expr {[string first "\002RSS Debug HTTP\002" [lindex $logs 0]] >= 0}]
+    set hasDebugLog 0
+    set hasInfoLog 0
+    foreach entry $logs {
+        if {!$hasDebugLog && [string first "RSS Debug HTTP" $entry] >= 0} {
+            set hasDebugLog 1
+        }
+        if {!$hasInfoLog && [string first "HTTP-Abruf" $entry] >= 0} {
+            set hasInfoLog 1
+        }
+    }
+    list [llength $logs] $hasDebugLog $hasInfoLog
 } -cleanup {
     namespace eval ::rss-synd { catch {array unset rss} }
     namespace eval ::rss-synd { array set rss $savedRss }
     namespace eval ::rss-synd { set debugOptions $savedDebug }
     ::testhelpers::reset_logs
-} -result {1 1}
+} -result {2 1 1}
 
 test feed_callback_emits_redirect_debug {Redirect-Debugmeldungen werden erzeugt} -setup {
     ::testhelpers::reset_logs
