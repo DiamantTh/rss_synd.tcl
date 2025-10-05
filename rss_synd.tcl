@@ -215,47 +215,51 @@ proc ::rss-synd::log_message {level text} {
 
 proc ::rss-synd::configure_debug {{settingsList {}}} {
 	variable default
-        variable debugOptions
+	variable settings
+	variable debugOptions
 
-        array set debugOptions {http 0 tls 0}
+	array set debugOptions {http 0 tls 0}
 
-        set configList {}
-        if {[llength $settingsList] > 0} {
-                set configList $settingsList
-        } elseif {[info exists default]} {
-                set configList $default
-        }
+	set modes {}
+	if {[llength $settingsList] > 0} {
+		array set cfg $settingsList
+		if {[info exists cfg(debug-mode)] && $cfg(debug-mode) ne ""} {
+			set modes $cfg(debug-mode)
+		}
+	}
+	if {[llength $modes] == 0} {
+		if {[info exists settings(debug-mode)] && $settings(debug-mode) ne ""} {
+			set modes $settings(debug-mode)
+		} elseif {[info exists default]} {
+			array set cfgDefault $default
+			if {[info exists cfgDefault(debug-mode)] && $cfgDefault(debug-mode) ne ""} {
+				set modes $cfgDefault(debug-mode)
+			}
+		}
+	}
 
-        set modes {}
-        if {[llength $configList] > 0} {
-                array set cfg $configList
-                if {[info exists cfg(debug-mode)]} {
-                        set modes $cfg(debug-mode)
-                }
-        }
+	foreach mode $modes {
+		set normalized [string tolower $mode]
+		switch -exact -- $normalized {
+			all {
+				set debugOptions(http) 1
+				set debugOptions(tls) 1
+			}
+			http {
+				set debugOptions(http) 1
+			}
+			tls {
+				set debugOptions(tls) 1
+			}
+			default {
+				if {$normalized ne ""} {
+					::rss-synd::log_message warning "\002RSS Warnung\002: Unbekannter 'debug-mode'-Wert '$mode' wird ignoriert."
+				}
+			}
+		}
+	}
 
-        foreach mode $modes {
-                set normalized [string tolower $mode]
-                switch -exact -- $normalized {
-                        all {
-                                set debugOptions(http) 1
-                                set debugOptions(tls) 1
-                        }
-                        http {
-                                set debugOptions(http) 1
-                        }
-                        tls {
-                                set debugOptions(tls) 1
-                        }
-                        default {
-                                if {$normalized ne ""} {
-                                        ::rss-synd::log_message warning "\002RSS Warnung\002: Unbekannter 'debug-mode'-Wert '$mode' wird ignoriert."
-                                }
-                        }
-                }
-        }
-
-        return [dict create http $debugOptions(http) tls $debugOptions(tls)]
+	return [dict create http $debugOptions(http) tls $debugOptions(tls)]
 }
 
 #
@@ -503,8 +507,8 @@ proc ::rss-synd::init {args} {
 	variable version
 	variable packages
 
-	set version(number)	git-7b92e8a
-	set version(date)	"2025-10-07"
+	set version(number)	git-ba75810
+	set version(date)	"2025-10-08"
 
         package require http
         set packages(base64) [catch {package require base64}]; # http auth

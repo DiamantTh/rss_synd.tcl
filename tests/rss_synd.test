@@ -84,6 +84,31 @@ test configure_debug_all_enables_http_and_tls {Konfiguration "all" aktiviert HTT
     namespace eval ::rss-synd { array set debugOptions {http 0 tls 0} }
 } -result {1 1}
 
+test configure_debug_uses_namespace_settings {Namespace-Setting aktiviert Debug-Flags ohne Argumente} -setup {
+    namespace eval ::rss-synd { catch {array unset debugOptions} }
+    set savedSettingsExists [namespace eval ::rss-synd { array exists settings }]
+    if {$savedSettingsExists} {
+        set savedSettings [namespace eval ::rss-synd { array get settings }]
+    } else {
+        set savedSettings {}
+    }
+    namespace eval ::rss-synd {
+        catch {array unset settings}
+        array set settings {debug-mode {http tls}}
+    }
+} -body {
+    ::rss-synd::configure_debug
+    namespace eval ::rss-synd { list $debugOptions(http) $debugOptions(tls) }
+} -cleanup {
+    namespace eval ::rss-synd {
+        array set debugOptions {http 0 tls 0}
+        catch {array unset settings}
+    }
+    if {$savedSettingsExists} {
+        namespace eval ::rss-synd { array set settings $savedSettings }
+    }
+} -result {1 1}
+
 test setup_tls_calls_tls_debug_when_enabled {TLS-Debug wird aktiviert und protokolliert} -setup {
     namespace eval ::rss-synd { catch {array unset debugOptions} }
     namespace eval ::tls { set debugCalls {} }
