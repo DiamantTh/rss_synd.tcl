@@ -12,7 +12,6 @@
 # Updated: 04-Oct-2025
 #
 # -*- tab-width: 4; indent-tabs-mode: t; -*-
-# rss-synd.tcl -- git-4bda2c0+debug-modes
 
 #
 # Logging-Hilfsfunktionen und Einstellungen
@@ -124,9 +123,9 @@ proc ::rss-synd::flush_log_queue {} {
 	if {[llength $summaryParts] > 0} {
 		append summary " (" [join $summaryParts ", "] ")"
 	}
-	append summary ", Erste [$firstLevel]: $firstText"
+	append summary ", Erste " {\[} $firstLevel {\]: } $firstText
 	if {$total > 1} {
-		append summary " – Letzte [$lastLevel]: $lastText"
+		append summary " – Letzte " {\[} $lastLevel {\]: } $lastText
 	}
 	putlog $summary
 	set logQueue {}
@@ -573,8 +572,6 @@ proc ::rss-synd::init {args} {
 	variable version
 	variable packages
 
-	set version(number)	git-4bda2c0+debug-modes
-	set version(date)	"2025-10-04"
 
         package require http
         set packages(base64) [catch {package require base64}]; # http auth
