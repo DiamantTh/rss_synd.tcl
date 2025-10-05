@@ -9,10 +9,6 @@
 # Maintainer: DiamantTh <https://github.com/DiamantTh>
 # Link: https://github.com/MICE07/rss_synd.tcl
 # Tags: rss, atom, syndication
-# Updated: 12-Oct-2025
-#
-# -*- tab-width: 4; indent-tabs-mode: t; -*-
-
 # Updated: 04-Oct-2025
 #
 # -*- tab-width: 4; indent-tabs-mode: t; -*-
