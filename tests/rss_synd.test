@@ -2,7 +2,7 @@ package require tcltest 2
 namespace import ::tcltest::*
 
 # Stubs für Eggdrop-spezifische Funktionen
-proc putlog {args} {}
+proc putlog {args} { ::testhelpers::capture_putlog {*}$args }
 proc putserv {args} {}
 proc botonchan {chan} { return 1 }
 proc is_utf8_patched {} { return 0 }
@@ -13,8 +13,9 @@ proc unixtime {} { clock seconds }
 namespace eval ::testhelpers {
     variable logMessages {}
 
-    proc capture_putlog {text} {
+    proc capture_putlog {args} {
         variable logMessages
+        set text [join $args " "]
         lappend logMessages $text
     }
 
@@ -55,9 +56,107 @@ namespace eval ::http {
         incr tokenCounter
         return "token$tokenCounter"
     }
+
+    proc register {args} { return {} }
+    proc unregister {args} { return {} }
+}
+
+namespace eval ::tls {
+    variable debugCalls {}
+
+    proc init {args} { return {} }
+    proc debug {flag} {
+        variable debugCalls
+        lappend debugCalls $flag
+        return {}
+    }
+    proc socket {args} { return sock }
 }
 
 namespace eval ::rss-synd { variable packages }
+
+test configure_debug_all_enables_http_and_tls {Konfiguration "all" aktiviert HTTP- und TLS-Debug-Flag} -setup {
+    namespace eval ::rss-synd { catch {array unset debugOptions} }
+} -body {
+    ::rss-synd::configure_debug [list debug-mode {all}]
+    namespace eval ::rss-synd { list $debugOptions(http) $debugOptions(tls) }
+} -cleanup {
+    namespace eval ::rss-synd { array set debugOptions {http 0 tls 0} }
+} -result {1 1}
+
+test setup_tls_calls_tls_debug_when_enabled {TLS-Debug wird aktiviert und protokolliert} -setup {
+    namespace eval ::rss-synd { catch {array unset debugOptions} }
+    namespace eval ::tls { set debugCalls {} }
+    ::testhelpers::reset_logs
+} -body {
+    ::rss-synd::configure_debug [list debug-mode {tls}]
+    ::testhelpers::reset_logs
+    ::rss-synd::setup_tls
+    set debugCount [llength [namespace eval ::tls { set debugCalls }]]
+    set logs [::testhelpers::get_logs]
+    set found 0
+    foreach entry $logs {
+        if {[string match *TLS-Debugmodus* $entry]} {
+            set found 1
+        }
+    }
+    list $debugCount $found
+} -cleanup {
+    namespace eval ::rss-synd { array set debugOptions {http 0 tls 0} }
+    ::testhelpers::reset_logs
+} -result {1 1}
+
+test feed_get_emits_http_debug_log_when_enabled {HTTP-Debug protokolliert URL, Timeout und Header} -setup {
+    set savedRssExists [namespace eval ::rss-synd { array exists rss }]
+    if {$savedRssExists} {
+        set savedRss [namespace eval ::rss-synd { array get rss }]
+    } else {
+        set savedRss {}
+    }
+    namespace eval ::rss-synd {
+        catch {array unset rss}
+        array set rss {}
+        set rss(debugfeed) [list \
+            "url" "http://example.test/feed" \
+            "timeout" 4200 \
+            "update-interval" 0 \
+            "announce-type" 0 \
+            "trigger-type" "0:2" \
+            "user-agent" {"Agent/1"} \
+            "user-agent-rotate" "" \
+            "url-auth" "dGVzdDp0b2tlbg==" \
+            "enable-gzip" 1 \
+            "updated" 0 \
+            "max-depth" 5 \
+        ]
+    }
+    ::testhelpers::reset_logs
+    namespace eval ::http { set tokenCounter 0 }
+} -body {
+    ::rss-synd::configure_debug [list debug-mode {http}]
+    ::testhelpers::reset_logs
+    ::rss-synd::feed_get
+    set logs [::testhelpers::get_logs]
+    set idx [lsearch -glob $logs "*HTTP GET*http://example.test/feed*"]
+    set hasMsg [expr {$idx >= 0}]
+    set headersLogged 0
+    if {$hasMsg} {
+        set entry [lindex $logs $idx]
+        if {[string match *timeout=4200* $entry] && [string match *Authorization* $entry] && [string match *Accept-Encoding* $entry]} {
+            set headersLogged 1
+        }
+    }
+    list $hasMsg $headersLogged
+} -cleanup {
+    namespace eval ::rss-synd {
+        catch {array unset rss}
+        if {$savedRssExists} {
+            array set rss $savedRss
+        }
+        array set debugOptions {http 0 tls 0}
+    }
+    ::testhelpers::reset_logs
+} -result {1 1}
 
 set sampleFeed {<rss><channel><title>Demo</title><item><title>Erster</title></item><item><title>Zweiter</title></item><item><title>Dritter</title></item></channel></rss>}
 

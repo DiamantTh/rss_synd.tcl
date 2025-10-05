@@ -84,6 +84,7 @@ Die folgenden Optionen kannst du global in der Default-Konfiguration oder pro Fe
 | Option | Beschreibung | Standard | Beispiel |
 | --- | --- | --- | --- |
 | `https-allow-legacy` | Erlaubt TLS 1.0/1.1 als Fallback (unsicher). | `0` | `1` |
+| `debug-mode` | Aktiviert zusätzliche Diagnoseausgaben. Erlaubte Werte sind `http` (HTTP-Anfragen protokollieren), `tls` (TLS-Handshake-Debugging) oder `all` (alle Debug-Kanäle). Mehrere Einträge können als Tcl-Liste kombiniert werden. | `{}` | `{http tls}` |
 | `log-mode` | Logging-Strategie für die Eggdrop-Konsole. `immediate` schreibt Meldungen sofort, `buffered` sammelt sie und fasst sie zusammen. | `immediate` | `buffered` |
 | `log-interval` | Minuten bis zur Ausgabe einer zusammengefassten Log-Nachricht, wenn `log-mode` auf `buffered` steht. | `5` | `10` |
 | `user-agent-rotate` | Rotationsstrategie für den User-Agent: `list` aktiviert das eingebaute Round-Robin, alternativ kann der Name einer Prozedur angegeben werden, die den nächsten Eintrag liefert. Der Aufruf erhält Feed-Namen und aktuelle Einstellungen und darf einen String oder ein Dict mit `user-agent` plus Zusatzwerten zurückgeben. | `list` | `list` / `::mein::ua::next` |
@@ -196,6 +197,6 @@ Eggdrop schreibt Skriptmeldungen in die Party-Line (DCC-Chat). Wer den Chat ruhi
 Im Pufferbetrieb werden einzelne Meldungen nicht mehr sofort angezeigt, sondern als kompakte Übersicht nach Ablauf des Intervalls ausgegeben. Mit `immediate` lässt sich das alte Verhalten jederzeit wiederherstellen.
 
 ## Kompatibilität & Versionen
-- Skriptversion git-4bda2c0 vom 03.10.2025. Die Versionsinformationen findest du direkt im Kopfbereich von `rss_synd.tcl`.
+- Skriptversion git-7b92e8a vom 07.10.2025. Die Versionsinformationen findest du direkt im Kopfbereich von `rss_synd.tcl`.
 - Benötigt einen Eggdrop mit Tcl-Unterstützung und dem Standardpaket `http`; optionale Features setzen `base64`, `tls` und `Trf` voraus (`package require …` in `rss_synd.tcl`).
 - Für HTTPS-Verbindungen initialisiert das Skript standardmäßig TLS 1.2/1.3 und registriert eigene TLS-Sockets; über `https-allow-legacy` kannst du bei Bedarf ältere Protokolle freischalten.
