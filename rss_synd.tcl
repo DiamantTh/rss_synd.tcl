@@ -12,7 +12,7 @@
 # Updated: 12-Oct-2025
 #
 # -*- tab-width: 4; indent-tabs-mode: t; -*-
-# rss-synd.tcl -- git-8ac21f0
+
 # Updated: 04-Oct-2025
 #
 # -*- tab-width: 4; indent-tabs-mode: t; -*-
@@ -43,7 +43,7 @@ namespace eval ::rss-synd {
         array set settings {config-format toml config-tcl-file {} config-toml-file {}}
 
         variable debugOptions
-        array set debugOptions {http 0 tls 0}
+        set debugOptions [dict create http 0 tls 0]
 
         set ctrl2 [format %c 2]
         set ctrl3 [format %c 3]
@@ -196,7 +196,7 @@ proc ::rss-synd::configure_debug {} {
         variable settings
         variable debugOptions
 
-        array set debugOptions {http 0 tls 0}
+        set debugOptions [dict create http 0 tls 0]
 
         if {![info exists settings(debug-mode)] || $settings(debug-mode) eq ""} {
                 return
@@ -211,14 +211,14 @@ proc ::rss-synd::configure_debug {} {
                 set normalized [string tolower $entry]
                 switch -exact -- $normalized {
                         http {
-                                set debugOptions(http) 1
+                                dict set debugOptions http 1
                         }
                         tls {
-                                set debugOptions(tls) 1
+                                dict set debugOptions tls 1
                         }
                         all {
-                                set debugOptions(http) 1
-                                set debugOptions(tls) 1
+                                dict set debugOptions http 1
+                                dict set debugOptions tls 1
                         }
                         default {
                                 ::rss-synd::log_message warning "\002RSS Warnung\002: Unbekannter debug-mode-Wert '$entry' wird ignoriert."
@@ -666,7 +666,7 @@ proc ::rss-synd::setup_tls {{settingsList {}}} {
         }
         set modernResult [catch {::tls::init {*}$modernOptions} modernErr]
         set appliedOptions $modernOptions
-        set tlsDebugRequested [expr {[info exists debugOptions(tls)] && $debugOptions(tls)}]
+        set tlsDebugRequested [expr {[dict exists $debugOptions tls] && [dict get $debugOptions tls]}]
         set tls(configured) 0
         set optionsNormalized 0
         set modernResult [catch {::tls::init {*}$modernOptions} modernErr]
@@ -761,7 +761,7 @@ proc ::rss-synd::init {args} {
 	variable packages
 	variable settings
 
-	set version(number)	git-8ac21f0
+	set version(number)	git-8ac21f0+dict-debug
 	set version(date)	"2025-10-12"
 
         package require http
@@ -1131,7 +1131,7 @@ proc ::rss-synd::feed_get {args} {
                                 ::rss-synd::log_message error "RSS HTTP Fehler: Anfrage für "$feed(url)" konnte nicht gestartet werden: $token"
                                 continue
                         }
-                        if {[info exists debugOptions(http)] && $debugOptions(http)} {
+                        if {[dict exists $debugOptions http] && [dict get $debugOptions http]} {
                                 set headerText [::rss-synd::format_header_debug $feed(headers)]
                                 ::rss-synd::log_message info [format "\002RSS Debug\002: HTTP-Abruf für '%s' (Timeout: %s ms, Header: %s)" $feed(url) $feed(timeout) $headerText]
                         }
@@ -1208,7 +1208,7 @@ proc ::rss-synd::feed_callback {feedlist args} {
                                         set ::http::url $redirectUrl
                                         set ::http::args $redirectOptions
                                         set redirectResult [catch {::http::geturl "$redirectUrl" {*}$redirectOptions} redirectToken]
-                                        if {[info exists debugOptions(http)] && $debugOptions(http)} {
+                                        if {[dict exists $debugOptions http] && [dict get $debugOptions http]} {
                                                 set headerText [::rss-synd::format_header_debug $feed(headers)]
                                                 ::rss-synd::log_message info [format "\002RSS Debug\002: HTTP-Redirect-Abruf für '%s' (Timeout: %s ms, Header: %s)" $redirectUrl $feed(timeout) $headerText]
                                         }
