@@ -12,7 +12,7 @@ Das Skript `rss_synd.tcl` erweitert Eggdrop-Bots um die Möglichkeit, RSS- und A
 - Optionales Nachbearbeiten der Ausgaben über Tcl-Ausdrücke.
 
 ## Installation
-1. Kopiere `rss_synd.tcl` und `rss-synd-settings.tcl` in das Skriptverzeichnis deines Eggdrop-Bots.
+1. Kopiere `rss_synd.tcl`, `rss-synd-settings.tcl` sowie (bei TOML-Konfiguration) `rss-synd.toml` in das Skriptverzeichnis deines Eggdrop-Bots.
 2. Ergänze deine `eggdrop.conf` um die Zeile `source scripts/rss-synd.tcl` (Pfad ggf. anpassen).
 
 ### Paketinstallation (optionale Features)
@@ -23,6 +23,7 @@ Die folgenden optionalen Funktionen erfordern zusätzliche Tcl-Erweiterungen:
 | HTTP-Authentifizierung | `base64` aus `tcllib` |
 | HTTPS-Unterstützung | `tls` |
 | Gzip-Dekomprimierung | `Trf` |
+| TOML-Konfiguration | `toml` aus `tcllib` |
 
 Installiere die benötigten Erweiterungen je nach Plattform über den jeweiligen Paketmanager, vorgefertigte Tcl-Pakete oder verfügbare Community-Repositorien.
 
@@ -32,6 +33,35 @@ Das Skript läuft ohne zusätzliche Pakete, jedoch sind bestimmte Funktionen nur
 - **HTTPS-Hinweis:** Zertifikate werden standardmäßig geprüft und es sind nur TLS 1.2/1.3 aktiv. Wenn deine Umgebung ausschließlich ältere Protokolle bietet, setze die Option `https-allow-legacy` auf `1` (unsicher, nur für Notfälle).
 
 ## Konfiguration
+### Konfigurationsformate
+
+`rss-synd-settings.tcl` enthält nur noch Umschaltparameter. Der zentrale Schalter `settings(config-format)` entscheidet, welches Format geladen wird:
+
+```tcl
+namespace eval ::rss-synd {
+    # "toml" nutzt rss-synd.toml (Standard) und benötigt das Tcllib-Paket "toml".
+    set settings(config-format) toml
+
+    # Optional eigene Pfade setzen:
+    # set settings(config-toml-file) "config/rss-synd.toml"
+    # set settings(config-tcl-file)  "config/rss-synd-legacy.tcl"
+}
+```
+
+- **TOML**: Die Datei `rss-synd.toml` enthält Abschnitte `[defaults]` und `[feeds.<name>]`. Beispiel:
+
+  ```toml
+  [defaults]
+  announce-output = 3
+  trigger-type = "0:2"
+
+  [feeds.news]
+  url = "https://example.tld/feed.xml"
+  channels = "#news #alerts"
+  ```
+
+- **Tcl**: Setze `config-format` auf `tcl` und gib optional `config-tcl-file` an. Ohne Pfad verwendet das Skript die eingebauten Fallback-Listen (identisch zur bisherigen Beispielkonfiguration).
+
 Die folgenden Optionen kannst du global in der Default-Konfiguration oder pro Feed festlegen. Spezifische Feed-Werte überschreiben globale Einstellungen.
 
 ### Pflichtfelder
@@ -91,7 +121,30 @@ Du kannst die Liste jederzeit anpassen, eigene Marken ergänzen oder wieder auf 
 | `@@entry!link!=href@@` | Wert des `href`-Attributs eines Link-Tags. | `https://example.tld/post` |
 | `@@entry!author!name@@` | Name des Autors im Artikel. | `Jane Doe` |
 
-## Beispielkonfiguration
+## Beispielkonfigurationen
+
+### TOML (Standard)
+```toml
+[defaults]
+announce-output = 3
+trigger-type = "0:2"
+channels = "#channel"
+trigger = "!rss @@feedid@@"
+output = "[\u0002@@channel!title@@@@title@@\u0002] @@item!title@@@@entry!title@@ - @@item!link@@@@entry!link!=href@@"
+user-agent = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
+]
+user-agent-rotate = "list"
+
+[feeds.news]
+url = "https://example.tld/feed.xml"
+channels = "#news #alerts"
+database = "./scripts/news.db"
+trigger = "!news @@feedid@@"
+```
+
+### Tcl (Legacy)
 ```tcl
 namespace eval ::rss-synd {
     set rss(news) {
@@ -143,6 +196,6 @@ Eggdrop schreibt Skriptmeldungen in die Party-Line (DCC-Chat). Wer den Chat ruhi
 Im Pufferbetrieb werden einzelne Meldungen nicht mehr sofort angezeigt, sondern als kompakte Übersicht nach Ablauf des Intervalls ausgegeben. Mit `immediate` lässt sich das alte Verhalten jederzeit wiederherstellen.
 
 ## Kompatibilität & Versionen
-- Skriptversion git-198a7a4 vom 03.10.2025. Die Versionsinformationen findest du direkt im Kopfbereich von `rss_synd.tcl`.
+- Skriptversion git-4bda2c0 vom 03.10.2025. Die Versionsinformationen findest du direkt im Kopfbereich von `rss_synd.tcl`.
 - Benötigt einen Eggdrop mit Tcl-Unterstützung und dem Standardpaket `http`; optionale Features setzen `base64`, `tls` und `Trf` voraus (`package require …` in `rss_synd.tcl`).
 - Für HTTPS-Verbindungen initialisiert das Skript standardmäßig TLS 1.2/1.3 und registriert eigene TLS-Sockets; über `https-allow-legacy` kannst du bei Bedarf ältere Protokolle freischalten.
