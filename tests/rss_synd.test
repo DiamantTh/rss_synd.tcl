@@ -234,7 +234,7 @@ test configure_debug_defaults_to_disabled {Leere Debug-Liste deaktiviert alle Fl
         set settings(debug-mode) {}
         ::rss-synd::configure_debug
         variable debugOptions
-        list $debugOptions(http) $debugOptions(tls)
+        list [dict get $debugOptions http] [dict get $debugOptions tls]
     }]
     return $result
 } -cleanup {
@@ -264,7 +264,7 @@ test configure_debug_all_enables_all_flags {'all' aktiviert HTTP- und TLS-Debug}
         set settings(debug-mode) {all}
         ::rss-synd::configure_debug
         variable debugOptions
-        list $debugOptions(http) $debugOptions(tls)
+        list [dict get $debugOptions http] [dict get $debugOptions tls]
     }]
     return $result
 } -cleanup {
