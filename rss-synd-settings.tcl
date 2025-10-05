@@ -25,5 +25,6 @@ namespace eval ::rss-synd {
     }
 
     if {![info exists settings(debug-mode)]} {
-
+        set settings(debug-mode) ""
+    }
 }
