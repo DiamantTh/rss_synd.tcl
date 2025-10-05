@@ -84,6 +84,7 @@ Die folgenden Optionen kannst du global in der Default-Konfiguration oder pro Fe
 | Option | Beschreibung | Standard | Beispiel |
 | --- | --- | --- | --- |
 | `https-allow-legacy` | Erlaubt TLS 1.0/1.1 als Fallback (unsicher). | `0` | `1` |
+| `debug-mode` | Aktiviert detailliertes Debugging. Liste mit `http`, `tls` oder `all`. `http` protokolliert URL, Timeout und Header der Abrufe, `tls` versucht `::tls::debug` zu nutzen und protokolliert andernfalls die verwendeten TLS-Optionen. | `{}` | `{http tls}` |
 | `log-mode` | Logging-Strategie für die Eggdrop-Konsole. `immediate` schreibt Meldungen sofort, `buffered` sammelt sie und fasst sie zusammen. | `immediate` | `buffered` |
 | `log-interval` | Minuten bis zur Ausgabe einer zusammengefassten Log-Nachricht, wenn `log-mode` auf `buffered` steht. | `5` | `10` |
 | `debug-mode` | Aktiviert ausführliches Debugging für TLS (`tls`), HTTP-Anfragen (`http`) und Redirect-Verarbeitung (`redirect`). Akzeptiert eine durch Leerzeichen oder Kommata getrennte Liste oder `all` für alle Modi. | *(leer)* | `tls,http` |
@@ -197,6 +198,6 @@ Eggdrop schreibt Skriptmeldungen in die Party-Line (DCC-Chat). Wer den Chat ruhi
 Im Pufferbetrieb werden einzelne Meldungen nicht mehr sofort angezeigt, sondern als kompakte Übersicht nach Ablauf des Intervalls ausgegeben. Mit `immediate` lässt sich das alte Verhalten jederzeit wiederherstellen.
 
 ## Kompatibilität & Versionen
-- Skriptversion git-8ac21f0+debug-mode vom 12.10.2025. Die Versionsinformationen findest du direkt im Kopfbereich von `rss_synd.tcl`.
+
 - Benötigt einen Eggdrop mit Tcl-Unterstützung und dem Standardpaket `http`; optionale Features setzen `base64`, `tls` und `Trf` voraus (`package require …` in `rss_synd.tcl`).
 - Für HTTPS-Verbindungen initialisiert das Skript standardmäßig TLS 1.2/1.3 und registriert eigene TLS-Sockets; über `https-allow-legacy` kannst du bei Bedarf ältere Protokolle freischalten.
