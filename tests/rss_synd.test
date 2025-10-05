@@ -2,7 +2,6 @@ package require tcltest 2
 namespace import ::tcltest::*
 
 # Stubs für Eggdrop-spezifische Funktionen
-proc putlog {args} {}
 proc putserv {args} {}
 proc botonchan {chan} { return 1 }
 proc is_utf8_patched {} { return 0 }
@@ -31,6 +30,10 @@ namespace eval ::testhelpers {
         variable logMessages
         return $logMessages
     }
+}
+
+proc putlog {args} {
+    ::testhelpers::capture_putlog [join $args " "]
 }
 
 set here [file dirname [info script]]
@@ -66,6 +69,39 @@ array set feed {}
 set feed(announce-output) 2
 set feed(trigger-output) 3
 ::rss-synd::feed_info $parsedFeed feed
+
+test flush_log_queue_escapes_level_names {flush_log_queue maskiert Level-Präfixe korrekt} -setup {
+    ::testhelpers::reset_logs
+    set savedState [namespace eval ::rss-synd {
+        variable logQueue
+        variable logTimer
+        list $logQueue $logTimer
+    }]
+    namespace eval ::rss-synd {
+        variable logQueue
+        variable logTimer
+        set logQueue [list \
+            [dict create level warning text "Erste Meldung"] \
+            [dict create level error text "Letzte Meldung"]
+        ]
+        set logTimer ""
+    }
+} -body {
+    ::rss-synd::flush_log_queue
+    set logs [::testhelpers::get_logs]
+    set summary [lindex $logs 0]
+    set warnIndex [string first {\[warning\]} $summary]
+    set errorIndex [string first {\[error\]} $summary]
+    list [llength $logs] [expr {$warnIndex >= 0}] [expr {$errorIndex >= 0}]
+} -cleanup {
+    namespace eval ::rss-synd {
+        variable logQueue
+        variable logTimer
+        set logQueue [lindex $savedState 0]
+        set logTimer [lindex $savedState 1]
+    }
+    ::testhelpers::reset_logs
+} -result {1 1 1}
 
 # Test: xml_list_create kann Werte korrekt auslesen
 set titlePath [::rss-synd::xml_join_tags $feed(tag-feed) $feed(tag-list) 1 $feed(tag-name) 0 title]
