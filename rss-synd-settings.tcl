@@ -23,4 +23,9 @@ namespace eval ::rss-synd {
     if {![info exists settings(config-tcl-file)]} {
         set settings(config-tcl-file) ""
     }
+
+    if {![info exists settings(debug-mode)]} {
+        set settings(debug-mode) ""
+    }
+
 }
