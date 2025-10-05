@@ -33,6 +33,12 @@ namespace eval ::testhelpers {
     }
 }
 
+proc putlog {text} {
+    ::testhelpers::capture_putlog $text
+}
+
+::testhelpers::reset_logs
+
 set here [file dirname [info script]]
 namespace eval ::rss-synd {}
 source [file join $here .. rss_synd.tcl]
@@ -40,6 +46,7 @@ source [file join $here .. rss_synd.tcl]
 namespace eval ::http {
     variable lastUserAgents {}
     variable tokenCounter 0
+    variable statusByToken {}
 
     proc config {args} {
         variable lastUserAgents
@@ -52,12 +59,57 @@ namespace eval ::http {
 
     proc geturl {url args} {
         variable tokenCounter
+        variable statusByToken
         incr tokenCounter
-        return "token$tokenCounter"
+        set token "token$tokenCounter"
+        if {![dict exists $statusByToken $token]} {
+            set statusByToken [dict replace $statusByToken $token 200]
+        }
+        return $token
+    }
+
+    proc register {args} { return {} }
+    proc unregister {args} { return {} }
+    proc cleanup {token} {
+        variable statusByToken
+        if {[dict exists $statusByToken $token]} {
+            set statusByToken [dict remove $statusByToken $token]
+        }
+    }
+
+    proc ncode {token} {
+        variable statusByToken
+        if {[dict exists $statusByToken $token]} {
+            return [dict get $statusByToken $token]
+        }
+        return 200
     }
 }
 
 namespace eval ::rss-synd { variable packages }
+
+namespace eval ::tls {
+    variable initArgs {}
+    variable debugCalls {}
+
+    proc init {args} {
+        variable initArgs
+        set initArgs $args
+        return {}
+    }
+
+    proc debug {args} {
+        variable debugCalls
+        # Speichere die übergebenen Argumente je Aufruf als Liste,
+        # damit Tests die erwarteten Parameter exakt prüfen können.
+        lappend debugCalls [list {*}$args]
+        return {}
+    }
+
+    proc socket {args} {
+        return socket
+    }
+}
 
 set sampleFeed {<rss><channel><title>Demo</title><item><title>Erster</title></item><item><title>Zweiter</title></item><item><title>Dritter</title></item></channel></rss>}
 
@@ -110,6 +162,258 @@ test resolve_redirect_fallback_parent {Fallback-Auflösung unterstützt '..'} -b
     namespace eval ::rss-synd { set packages(uri) 1 }
     ::rss-synd::resolve_redirect "http://example.com/base/dir/index" "../next.xml"
 } -result "http://example.com/base/next.xml"
+
+
+test configure_debug_defaults_to_disabled {Leere Debug-Liste deaktiviert alle Flags} -body {
+    set ::test_savedDebugMode_default [namespace eval ::rss-synd {
+        variable settings
+        set value {}
+        if {[info exists settings(debug-mode)]} {
+            set value $settings(debug-mode)
+        }
+        set value
+    }]
+    ::testhelpers::reset_logs
+    set result [namespace eval ::rss-synd {
+        variable settings
+        set settings(debug-mode) {}
+        ::rss-synd::configure_debug
+        variable debugOptions
+        list $debugOptions(http) $debugOptions(tls)
+    }]
+    return $result
+} -cleanup {
+    if {[info exists ::test_savedDebugMode_default]} {
+        namespace eval ::rss-synd {
+            variable settings
+            set settings(debug-mode) $::test_savedDebugMode_default
+            ::rss-synd::configure_debug
+        }
+        unset ::test_savedDebugMode_default
+    }
+    ::testhelpers::reset_logs
+} -result {0 0}
+
+test configure_debug_all_enables_all_flags {'all' aktiviert HTTP- und TLS-Debug} -body {
+    set ::test_savedDebugMode_all [namespace eval ::rss-synd {
+        variable settings
+        set value {}
+        if {[info exists settings(debug-mode)]} {
+            set value $settings(debug-mode)
+        }
+        set value
+    }]
+    ::testhelpers::reset_logs
+    set result [namespace eval ::rss-synd {
+        variable settings
+        set settings(debug-mode) {all}
+        ::rss-synd::configure_debug
+        variable debugOptions
+        list $debugOptions(http) $debugOptions(tls)
+    }]
+    return $result
+} -cleanup {
+    if {[info exists ::test_savedDebugMode_all]} {
+        namespace eval ::rss-synd {
+            variable settings
+            set settings(debug-mode) $::test_savedDebugMode_all
+            ::rss-synd::configure_debug
+        }
+        unset ::test_savedDebugMode_all
+    }
+    ::testhelpers::reset_logs
+} -result {1 1}
+
+test setup_tls_activates_tls_debug_command {TLS-Debug ruft ::tls::debug auf und meldet die Aktivierung} -body {
+    set ::test_savedDebugMode_tls [namespace eval ::rss-synd {
+        variable settings
+        set value {}
+        if {[info exists settings(debug-mode)]} {
+            set value $settings(debug-mode)
+        }
+        set value
+    }]
+    namespace eval ::rss-synd {
+        variable settings
+        catch {array unset tls}
+        set settings(debug-mode) {tls}
+        ::rss-synd::configure_debug
+    }
+    namespace eval ::tls { set debugCalls {} }
+    namespace eval ::http { set statusByToken {}; set tokenCounter 0 }
+    ::testhelpers::reset_logs
+    set setupResult [::rss-synd::setup_tls]
+    set logs [::testhelpers::get_logs]
+    set debugCalls [namespace eval ::tls { set debugCalls }]
+    set result [list $setupResult [expr {[llength $debugCalls] == 1 && [lindex $debugCalls 0] == 1}] [string match "\u0002RSS Debug\u0002: TLS-Debugausgabe*" [lindex $logs end]]]
+    return $result
+} -cleanup {
+    namespace eval ::rss-synd { catch {array unset tls} }
+    if {[info exists ::test_savedDebugMode_tls]} {
+        namespace eval ::rss-synd {
+            variable settings
+            set settings(debug-mode) $::test_savedDebugMode_tls
+            ::rss-synd::configure_debug
+        }
+        unset ::test_savedDebugMode_tls
+    }
+    namespace eval ::tls { set debugCalls {} }
+    ::testhelpers::reset_logs
+} -result {1 1 1}
+
+test setup_tls_logs_options_without_tls_debug {Fehlt ::tls::debug, werden TLS-Optionen protokolliert} -body {
+    set ::test_savedDebugMode_tlsFallback [namespace eval ::rss-synd {
+        variable settings
+        set value {}
+        if {[info exists settings(debug-mode)]} {
+            set value $settings(debug-mode)
+        }
+        set value
+    }]
+    namespace eval ::rss-synd {
+        variable settings
+        catch {array unset tls}
+        set settings(debug-mode) {tls}
+        ::rss-synd::configure_debug
+    }
+    namespace eval ::tls { set debugCalls {} }
+    namespace eval ::http { set statusByToken {}; set tokenCounter 0 }
+    if {[info commands ::tls::debug] ne ""} {
+        rename ::tls::debug ::tls::debug_saved
+        set ::test_savedTlsDebugRestored 1
+    }
+    ::testhelpers::reset_logs
+    set setupResult [::rss-synd::setup_tls]
+    set logs [::testhelpers::get_logs]
+    set result [list $setupResult [llength $logs] [string match "\u0002RSS Debug\u0002: TLS-Debugmodus angefordert,*" [lindex $logs 0]] [string match "\u0002RSS Debug\u0002: Verwendete TLS-Handshake-Optionen:*" [lindex $logs 1]]]
+    return $result
+} -cleanup {
+    if {[info commands ::tls::debug_saved] ne ""} {
+        rename ::tls::debug_saved ::tls::debug
+        catch {unset ::test_savedTlsDebugRestored}
+    }
+    namespace eval ::rss-synd { catch {array unset tls} }
+    if {[info exists ::test_savedDebugMode_tlsFallback]} {
+        namespace eval ::rss-synd {
+            variable settings
+            set settings(debug-mode) $::test_savedDebugMode_tlsFallback
+            ::rss-synd::configure_debug
+        }
+        unset ::test_savedDebugMode_tlsFallback
+    }
+    namespace eval ::tls { set debugCalls {} }
+    ::testhelpers::reset_logs
+} -result {1 2 1 1}
+
+test feed_get_logs_http_debug_info {HTTP-Debug protokolliert URL, Timeout und Header} -body {
+    set ::test_savedRssDebug [namespace eval ::rss-synd {
+        if {[array exists rss]} {
+            array get rss
+        } else {
+            {}
+        }
+    }]
+    namespace eval ::rss-synd {
+        catch {array unset rss}
+        variable rss
+        set rss(debug-log) {
+            user-agent {"Agent/1"}
+            user-agent-rotate list
+            announce-type 0
+            update-interval 0
+            timeout 1500
+            url http://example.test/debug
+            url-auth ""
+            updated 0
+        }
+    }
+    set ::test_savedDebugMode_http [namespace eval ::rss-synd {
+        variable settings
+        set value {}
+        if {[info exists settings(debug-mode)]} {
+            set value $settings(debug-mode)
+        }
+        set value
+    }]
+    namespace eval ::rss-synd {
+        variable settings
+        set settings(debug-mode) {http}
+        ::rss-synd::configure_debug
+    }
+    namespace eval ::http { set statusByToken {}; set tokenCounter 0 }
+    ::testhelpers::reset_logs
+    ::rss-synd::feed_get
+    set logs [::testhelpers::get_logs]
+    set result [list [llength $logs] [string match "\u0002RSS Debug\u0002: HTTP-Abruf für '* (Timeout: 1500 ms, Header: keine)" [lindex $logs 0]]]
+    return $result
+} -cleanup {
+    namespace eval ::rss-synd { catch {array unset rss} }
+    if {[info exists ::test_savedRssDebug] && [llength $::test_savedRssDebug] > 0} {
+        namespace eval ::rss-synd { array set rss $::test_savedRssDebug }
+    }
+    if {[info exists ::test_savedDebugMode_http]} {
+        namespace eval ::rss-synd {
+            variable settings
+            set settings(debug-mode) $::test_savedDebugMode_http
+            ::rss-synd::configure_debug
+        }
+        unset ::test_savedDebugMode_http
+    }
+    catch {unset ::test_savedRssDebug}
+    namespace eval ::http { set statusByToken {}; set tokenCounter 0 }
+    ::testhelpers::reset_logs
+} -result {1 1}
+
+test feed_callback_logs_redirect_http_debug {HTTP-Debug gibt Informationen zum Redirect-Abruf aus} -body {
+    set ::test_savedDebugMode_redirect [namespace eval ::rss-synd {
+        variable settings
+        set value {}
+        if {[info exists settings(debug-mode)]} {
+            set value $settings(debug-mode)
+        }
+        set value
+    }]
+    namespace eval ::rss-synd {
+        variable settings
+        set settings(debug-mode) {http}
+        ::rss-synd::configure_debug
+    }
+    namespace eval ::http { set statusByToken {}; set tokenCounter 0 }
+    ::testhelpers::reset_logs
+    array set ::tokenRedirect {
+        status ok
+        http {HTTP/1.1 302 Found}
+        meta {Location /redirect.xml}
+        url http://example.test/source
+    }
+    namespace eval ::http {
+        variable statusByToken
+        set statusByToken [dict replace $statusByToken tokenRedirect 302]
+    }
+    set feedlist {
+        url http://example.test/source
+        timeout 2000
+        headers {Authorization {Basic token}}
+        depth 0
+        max-depth 5
+    }
+    set callbackResult [::rss-synd::feed_callback $feedlist tokenRedirect]
+    set logs [::testhelpers::get_logs]
+    set result [list $callbackResult [llength $logs] [string match "\u0002RSS Debug\u0002: HTTP-Redirect-Abruf für '* (Timeout: 2000 ms, Header: Authorization: Basic token)" [lindex $logs 0]]]
+    return $result
+} -cleanup {
+    catch {array unset ::tokenRedirect}
+    namespace eval ::http { set statusByToken {}; set tokenCounter 0 }
+    if {[info exists ::test_savedDebugMode_redirect]} {
+        namespace eval ::rss-synd {
+            variable settings
+            set settings(debug-mode) $::test_savedDebugMode_redirect
+            ::rss-synd::configure_debug
+        }
+        unset ::test_savedDebugMode_redirect
+    }
+    ::testhelpers::reset_logs
+} -result {1 1 1}
 
 # Test: xml_list_create kann auf Teilbereiche beschränkt werden
 set childXml "<root><entry>A</entry><entry>B</entry></root>"
