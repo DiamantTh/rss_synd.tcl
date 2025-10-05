@@ -12,7 +12,7 @@
 # Updated: 12-Oct-2025
 #
 # -*- tab-width: 4; indent-tabs-mode: t; -*-
-# rss-synd.tcl -- git-8ac21f0+debug-mode
+# rss-synd.tcl -- git-8ac21f0
 # Updated: 04-Oct-2025
 #
 # -*- tab-width: 4; indent-tabs-mode: t; -*-
