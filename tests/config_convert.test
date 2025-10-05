@@ -1,0 +1,51 @@
+package require tcltest 2
+namespace import ::tcltest::*
+
+set here [file dirname [info script]]
+set tool [file normalize [file join $here .. tools config-convert.tcl]]
+set sampleToml [file normalize [file join $here .. rss-synd.toml]]
+
+if {![file exists $tool]} {
+    error "Konverter-Skript nicht gefunden: $tool"
+}
+
+test config_convert_toml_to_tcl {Konvertierung von TOML nach Tcl erzeugt set-Blöcke} -setup {
+    set tmpdir [makeDirectory tmp-config-convert-toml]
+    set outfile [file join $tmpdir output.tcl]
+} -body {
+    exec tclsh $tool --from toml --to tcl --input $sampleToml --output $outfile
+    set fh [open $outfile r]
+    set content [string trim [read $fh]]
+    close $fh
+    set hasDefault [regexp {^set default \{} $content]
+    set hasFeed [regexp {set rss\(msbulletins\) \{} $content]
+    list $hasDefault $hasFeed
+} -cleanup {
+    removeDirectory $tmpdir
+} -result {1 1}
+
+if {[catch {package require toml}]} {
+    ::tcltest::testConstraint haveToml 0
+} else {
+    ::tcltest::testConstraint haveToml 1
+}
+
+test config_convert_tcl_to_toml {Konvertierung einer Tcl-Datei nach TOML liefert parsebare Ausgabe} -constraints haveToml -setup {
+    set tmpdir [makeDirectory tmp-config-convert-tcl]
+    set infile [file join $tmpdir config.tcl]
+    set outfile [file join $tmpdir config.toml]
+    set fh [open $infile w]
+    puts $fh "set default {announce-output 2 channels #demo}"
+    puts $fh "set rss(example) {url http://example.test/feed update-interval 15}"
+    close $fh
+} -body {
+    exec tclsh $tool --from tcl --to toml --input $infile --output $outfile
+    set fh [open $outfile r]
+    set parsed [::toml::parse [read $fh]]
+    close $fh
+    list [dict get $parsed defaults announce-output] [dict get $parsed feeds example url]
+} -cleanup {
+    removeDirectory $tmpdir
+} -result {2 http://example.test/feed}
+
+cleanupTests

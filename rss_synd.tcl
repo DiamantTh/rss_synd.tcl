@@ -12,7 +12,7 @@
 # Updated: 03-Oct-2025
 #
 # -*- tab-width: 4; indent-tabs-mode: t; -*-
-# rss-synd.tcl -- git-4bda2c0
+# rss-synd.tcl -- git-4bda2c0+config-convert
 
 #
 # Logging-Hilfsfunktionen und Einstellungen
@@ -23,6 +23,8 @@ namespace eval ::rss-synd {
         variable logTimer ""
         variable logMode immediate
         variable logInterval 5
+
+        variable scriptBaseDir [file dirname [info script]]
 
         variable settings
         array set settings {config-format toml config-tcl-file {} config-toml-file {}}
@@ -249,7 +251,13 @@ proc ::rss-synd::load_config {} {
         variable fallbackDefault
         variable fallbackFeeds
 
-        set scriptDir [file dirname [info script]]
+        variable scriptBaseDir
+
+        if {[info exists scriptBaseDir] && $scriptBaseDir ne ""} {
+                set scriptDir $scriptBaseDir
+        } else {
+                set scriptDir [file dirname [info script]]
+        }
         set togglesFile [file normalize [file join $scriptDir rss-synd-settings.tcl]]
 
         if {![file exists $togglesFile]} {
@@ -258,8 +266,17 @@ proc ::rss-synd::load_config {} {
                 error $err
         }
 
+        set preserved {}
+        if {[array exists settings]} {
+                set preserved [array get settings]
+        }
+
         catch {array unset settings}
         array set settings {config-format toml config-tcl-file {} config-toml-file {}}
+
+        if {[llength $preserved] > 0} {
+                array set settings $preserved
+        }
 
         if {[catch {source $togglesFile} err]} {
                 ::rss-synd::use_fallback_config "\002RSS Warnung\002: Umschaltdatei konnte nicht geladen werden: $err"
@@ -349,6 +366,44 @@ proc ::rss-synd::load_config {} {
                         set rss($feedName) $feedList
                 }
         }
+}
+
+proc ::rss-synd::configuration_to_dict {} {
+        variable default
+        variable rss
+        variable fallbackDefault
+        variable fallbackFeeds
+
+        set defaultsList [expr {[info exists default] ? $default : $fallbackDefault}]
+        if {[llength $defaultsList] % 2 != 0} {
+                error "Ungültige Default-Liste: ungerade Anzahl an Elementen"
+        }
+
+        set defaultsDict [dict create]
+        foreach {key value} $defaultsList {
+                dict set defaultsDict $key $value
+        }
+
+        set feedsDict [dict create]
+        if {![array exists rss] || [array size rss] == 0} {
+                dict for {feedName feedSpec} $fallbackFeeds {
+                        dict set feedsDict $feedName $feedSpec
+                }
+        } else {
+                foreach feedName [lsort [array names rss]] {
+                        set feedList $rss($feedName)
+                        if {[llength $feedList] % 2 != 0} {
+                                error "Ungültige Feed-Liste für '$feedName': ungerade Anzahl an Elementen"
+                        }
+                        set feedDict [dict create]
+                        foreach {key value} $feedList {
+                                dict set feedDict $key $value
+                        }
+                        dict set feedsDict $feedName $feedDict
+                }
+        }
+
+        return [dict create defaults $defaultsDict feeds $feedsDict]
 }
 
 #
