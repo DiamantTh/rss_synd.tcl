@@ -12,17 +12,70 @@
 # Updated: 03-Oct-2025
 #
 # -*- tab-width: 4; indent-tabs-mode: t; -*-
-# rss-synd.tcl -- git-7fb5cbe
+# rss-synd.tcl -- git-4bda2c0
 
 #
 # Logging-Hilfsfunktionen und Einstellungen
 #
 
 namespace eval ::rss-synd {
-	variable logQueue {}
-	variable logTimer ""
-	variable logMode immediate
-	variable logInterval 5
+        variable logQueue {}
+        variable logTimer ""
+        variable logMode immediate
+        variable logInterval 5
+
+        variable settings
+        array set settings {config-format toml config-tcl-file {} config-toml-file {}}
+
+        set ctrl2 [format %c 2]
+        set ctrl3 [format %c 3]
+        set fallbackOutputDefault [string cat {[} $ctrl2 {@@channel!title@@@@title@@} $ctrl2 {] @@item!title@@@@entry!title@@ - @@item!link@@@@entry!link!=href@@}]
+        set fallbackOutputMs [string cat {[} $ctrl3 {12} $ctrl2 {MS Security bulletins} $ctrl2 $ctrl3 {] } $ctrl3 {10} $ctrl2 {@@item!title@@} $ctrl2 $ctrl3 { - @@item!link@@}]
+
+        variable fallbackDefault [list \
+                "announce-output"       3 \
+                "trigger-output"        3 \
+                "remove-empty"          1 \
+                "trigger-type"          0:2 \
+                "announce-type"         0 \
+                "max-depth"             5 \
+                "evaluate-tcl"          0 \
+                "update-interval"       30 \
+                "output-order"          0 \
+                "log-mode"              immediate \
+                "log-interval"          5 \
+                "timeout"               60000 \
+                "channels"              "#channel" \
+                "trigger"               "!rss @@feedid@@" \
+                "output"                $fallbackOutputDefault \
+                "user-agent"            [list \
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36" \
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36" \
+                        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36" \
+                        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1" \
+                        "Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1" \
+                        "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro Build/AP2A.240605.024) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.6533.72 Mobile Safari/537.36" \
+                        "Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36" \
+                ] \
+                "user-agent-rotate"     list \
+                "https-allow-legacy"    0 \
+        ]
+
+        variable fallbackFeeds [dict create \
+                msbulletins [list \
+                        "url"                   "http://technet.microsoft.com/en-us/security/rss/bulletin" \
+                        "channels"              "#channel" \
+                        "database"              "/path to dir/msbulletins.db" \
+                        "output"                $fallbackOutputMs \
+                        "trigger"               "!msbulletins" \
+                        "announce-output"       5 \
+                        "trigger-output"        5 \
+                        "update-interval"       10 \
+                        "output-order"          0 \
+                ] \
+        ]
+
+        unset fallbackOutputDefault fallbackOutputMs ctrl2 ctrl3
 }
 
 proc ::rss-synd::log_preview {text} {
@@ -122,10 +175,10 @@ proc ::rss-synd::configure_logging {{settingsList {}}} {
 }
 
 proc ::rss-synd::log_message {level text} {
-	variable logMode
-	variable logInterval
-	variable logQueue
-	variable logTimer
+        variable logMode
+        variable logInterval
+        variable logQueue
+        variable logTimer
 
 	set mode [string tolower $logMode]
 	set intervalMinutes $logInterval
@@ -154,19 +207,155 @@ proc ::rss-synd::log_message {level text} {
 			set seconds 1
 		}
 		set logTimer [utimer $seconds [list ::rss-synd::flush_log_queue]]
-	}
+        }
+}
+
+#
+# Konfigurationsverwaltung
+#
+
+proc ::rss-synd::resolve_path {path baseDir} {
+        if {$path eq ""} {
+                return ""
+        }
+        set pathtype [file pathtype $path]
+        if {$pathtype eq "relative"} {
+                return [file normalize [file join $baseDir $path]]
+        }
+        return [file normalize $path]
+}
+
+proc ::rss-synd::use_fallback_config {{message ""}} {
+        variable default
+        variable rss
+        variable fallbackDefault
+        variable fallbackFeeds
+
+        set default $fallbackDefault
+        catch {array unset rss}
+        array set rss {}
+        dict for {feedName feedList} $fallbackFeeds {
+                set rss($feedName) $feedList
+        }
+        if {$message ne ""} {
+                ::rss-synd::log_message warning $message
+        }
+}
+
+proc ::rss-synd::load_config {} {
+        variable settings
+        variable default
+        variable rss
+        variable fallbackDefault
+        variable fallbackFeeds
+
+        set scriptDir [file dirname [info script]]
+        set togglesFile [file normalize [file join $scriptDir rss-synd-settings.tcl]]
+
+        if {![file exists $togglesFile]} {
+                set err [format {couldn't read file "%s": no such file or directory} $togglesFile]
+                ::rss-synd::log_message error "Error: Could not load settings file '$togglesFile': $err"
+                error $err
+        }
+
+        catch {array unset settings}
+        array set settings {config-format toml config-tcl-file {} config-toml-file {}}
+
+        if {[catch {source $togglesFile} err]} {
+                ::rss-synd::use_fallback_config "\002RSS Warnung\002: Umschaltdatei konnte nicht geladen werden: $err"
+                return
+        }
+
+        if {![info exists settings(config-format)] || $settings(config-format) eq ""} {
+                set settings(config-format) toml
+        }
+
+        set format [string tolower $settings(config-format)]
+        if {$format ni {toml tcl}} {
+                set format toml
+        }
+
+        if {$format eq "tcl"} {
+                set configFile $settings(config-tcl-file)
+                if {$configFile eq ""} {
+                        set configFile $togglesFile
+                }
+                set configFile [::rss-synd::resolve_path $configFile $scriptDir]
+                if {[catch {source $configFile} err]} {
+                        ::rss-synd::use_fallback_config "\002RSS Fehler\002: Tcl-Konfigurationsdatei konnte nicht geladen werden: $err"
+                        return
+                }
+                if {![info exists default] || [llength $default] == 0} {
+                        set default $fallbackDefault
+                }
+                if {![array exists rss] || [array size rss] == 0} {
+                        catch {array unset rss}
+                        array set rss {}
+                        dict for {feedName feedList} $fallbackFeeds {
+                                set rss($feedName) $feedList
+                        }
+                }
+                return
+        }
+
+        set tomlFile $settings(config-toml-file)
+        if {$tomlFile eq ""} {
+                set tomlFile [file join $scriptDir rss-synd.toml]
+        }
+        set tomlFile [::rss-synd::resolve_path $tomlFile $scriptDir]
+
+        if {[catch {package require toml} err]} {
+                ::rss-synd::use_fallback_config "\002RSS Fehler\002: toml-Paket nicht verfügbar ($err), nutze Tcl-Fallback."
+                return
+        }
+
+        if {![file exists $tomlFile]} {
+                ::rss-synd::use_fallback_config "\002RSS Fehler\002: TOML-Datei '$tomlFile' nicht gefunden, nutze Tcl-Fallback."
+                return
+        }
+
+        if {[catch {set parsed [::toml::parsefile $tomlFile]} err]} {
+                ::rss-synd::use_fallback_config "\002RSS Fehler\002: TOML-Datei konnte nicht gelesen werden: $err"
+                return
+        }
+
+        set defaultList {}
+        if {[dict exists $parsed defaults]} {
+                dict for {key value} [dict get $parsed defaults] {
+                        lappend defaultList $key $value
+                }
+        }
+        if {[llength $defaultList] == 0} {
+                set defaultList $fallbackDefault
+        }
+        set default $defaultList
+
+        catch {array unset rss}
+        array set rss {}
+        if {[dict exists $parsed feeds]} {
+                dict for {feedName feedSpec} [dict get $parsed feeds] {
+                        if {[dict size $feedSpec] == 0} {
+                                continue
+                        }
+                        set feedList {}
+                        dict for {key value} $feedSpec {
+                                lappend feedList $key $value
+                        }
+                        set rss($feedName) $feedList
+                }
+        }
+        if {[array size rss] == 0} {
+                dict for {feedName feedList} $fallbackFeeds {
+                        set rss($feedName) $feedList
+                }
+        }
 }
 
 #
 # Include Settings
 #
 
-set settingsPath [file normalize [file join [file dirname [info script]] rss-synd-settings.tcl]]
-if {[catch {source $settingsPath} err]} {
-        ::rss-synd::log_message error "Error: Could not load settings file '$settingsPath': $err"
-        error $err
-}
-unset settingsPath
+::rss-synd::load_config
 
 proc ::rss-synd::tls_socket {args} {
 	variable tls
@@ -240,7 +429,7 @@ proc ::rss-synd::init {args} {
 	variable version
 	variable packages
 
-	set version(number)	git-7fb5cbe
+	set version(number)	git-4bda2c0
 	set version(date)	"2025-10-03"
 
         package require http
