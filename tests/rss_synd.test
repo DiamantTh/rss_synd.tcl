@@ -78,6 +78,34 @@ namespace eval ::http {
         }
         return 200
     }
+
+    proc ncode {token} {
+        upvar 0 $token state
+        if {[info exists state(ncode)]} {
+            return $state(ncode)
+        }
+        if {[info exists state(http)] && [regexp {([0-9]{3})} $state(http) -> code]} {
+            return $code
+        }
+        return 200
+    }
+
+    proc data {token} {
+        upvar 0 $token state
+        if {[info exists state(body)]} {
+            return $state(body)
+        }
+        return ""
+    }
+
+    proc cleanup {token} {
+        if {[string match ::* $token]} {
+            catch {unset $token}
+        } else {
+            catch {unset ::$token}
+        }
+        return {}
+    }
 }
 
 namespace eval ::rss-synd { variable packages }
@@ -497,6 +525,151 @@ test feed_get_rotates_user_agent_list {User-Agent-Rotation liefert unterschiedli
         set tokenCounter 0
     }
 } -result {Agent/1.0 Agent/2.0 Agent/3.0}
+
+test configure_debug_enables_tls_logging {configure_debug aktiviert TLS-Debug wenn verfügbar} -setup {
+    ::testhelpers::reset_logs
+    set savedPackagesData [namespace eval ::rss-synd {
+        variable packages
+        if {[array exists packages]} {
+            list 1 [array get packages]
+        } else {
+            list 0 {}
+        }
+    }]
+    set savedDebug [namespace eval ::rss-synd { set debugOptions }]
+    namespace eval ::rss-synd {
+        variable packages
+        catch {array unset packages}
+        array set packages {}
+        set packages(tls) 0
+    }
+    set tlsExisted [namespace exists ::tls]
+    if {!$tlsExisted} {
+        namespace eval ::tls {}
+    }
+    set hadOriginal [expr {[info commands ::tls::debug] ne ""}]
+    if {$hadOriginal} {
+        rename ::tls::debug ::tls::debug__orig
+    }
+    namespace eval ::tls {
+        variable lastDebugArgs {}
+        proc debug {args} {
+            variable lastDebugArgs
+            set lastDebugArgs $args
+            return {}
+        }
+    }
+} -body {
+    ::rss-synd::configure_debug [list debug-mode tls]
+    set opts [namespace eval ::rss-synd { set debugOptions }]
+    set debugProc [namespace eval ::tls { set lastDebugArgs }]
+    list [dict get $opts tls] [dict get $opts enabled] [expr {[string equal $debugProc ::rss-synd::tls_debug_logger]}]
+} -cleanup {
+    set packagesExisted [lindex $savedPackagesData 0]
+    set packagesList [lindex $savedPackagesData 1]
+    namespace eval ::rss-synd {
+        variable packages
+        catch {array unset packages}
+    }
+    if {$packagesExisted} {
+        namespace eval ::rss-synd { array set packages $packagesList }
+    } else {
+        namespace eval ::rss-synd { unset -nocomplain packages }
+    }
+    namespace eval ::rss-synd { set debugOptions $savedDebug }
+    if {[info commands ::tls::debug__orig] ne ""} {
+        rename ::tls::debug ::tls::debug__stub
+        rename ::tls::debug__orig ::tls::debug
+        rename ::tls::debug__stub {}
+        namespace eval ::tls { unset -nocomplain lastDebugArgs }
+    } else {
+        namespace delete ::tls
+    }
+} -result {1 1 1}
+
+test feed_get_emits_http_debug_log {feed_get erzeugt HTTP-Debug-Log bei aktivem Debug-Modus} -setup {
+    ::testhelpers::reset_logs
+    set savedDebug [namespace eval ::rss-synd { set debugOptions }]
+    set savedRss [namespace eval ::rss-synd { array get rss }]
+    namespace eval ::rss-synd {
+        array set tmp $rss(msbulletins)
+        set tmp(update-interval) 0
+        set tmp(updated) 0
+        set tmp(announce-output) 0
+        set tmp(trigger-output) 0
+        set tmp(headers) {}
+        set rss(msbulletins) [array get tmp]
+        unset tmp
+    }
+    ::rss-synd::configure_debug [list debug-mode http]
+} -body {
+    ::rss-synd::feed_get
+    set logs [::testhelpers::get_logs]
+    list [llength $logs] [expr {[string first "\002RSS Debug HTTP\002" [lindex $logs 0]] >= 0}]
+} -cleanup {
+    namespace eval ::rss-synd { catch {array unset rss} }
+    namespace eval ::rss-synd { array set rss $savedRss }
+    namespace eval ::rss-synd { set debugOptions $savedDebug }
+    ::testhelpers::reset_logs
+} -result {1 1}
+
+test feed_callback_emits_redirect_debug {Redirect-Debugmeldungen werden erzeugt} -setup {
+    ::testhelpers::reset_logs
+    set savedDebug [namespace eval ::rss-synd { set debugOptions }]
+    set savedPackagesData [namespace eval ::rss-synd {
+        variable packages
+        if {[array exists packages]} {
+            list 1 [array get packages]
+        } else {
+            list 0 {}
+        }
+    }]
+    namespace eval ::rss-synd {
+        variable packages
+        catch {array unset packages}
+        array set packages {}
+        set packages(uri) 1
+    }
+    set savedGeturlArgs [info args ::http::geturl]
+    set savedGeturlBody [info body ::http::geturl]
+    namespace eval ::http { variable lastRedirectArgs {} }
+    proc ::http::geturl {url args} {
+        namespace eval ::http {
+            variable lastRedirectArgs
+            set lastRedirectArgs [list $url $args]
+        }
+        return redirect-token
+    }
+    ::rss-synd::configure_debug [list debug-mode redirect]
+    array set ::http::redirectToken {status ok url http://example.test/feed http {HTTP/1.1 302 Found} ncode 302 meta {Location http://example.test/next}}
+} -body {
+    ::rss-synd::feed_callback {feed-name debug-feed max-depth 3 depth 0 timeout 1000 headers {} announce-output 0 trigger-output 0} ::http::redirectToken
+    set logs [::testhelpers::get_logs]
+    set hasDebug [expr {[string first "\002RSS Debug Redirect\002" [lindex $logs 0]] >= 0}]
+    set redirectInfo [namespace eval ::http { set lastRedirectArgs }]
+    set redirectUrl [lindex $redirectInfo 0]
+    set redirectArgs [lindex $redirectInfo 1]
+    set commandIndex [lsearch -exact $redirectArgs -command]
+    set commandScript [expr {$commandIndex >= 0 ? [lindex $redirectArgs [expr {$commandIndex + 1}]] : ""}]
+    list $hasDebug [string equal $redirectUrl "http://example.test/next"] [expr {$commandIndex >= 0 && [string first "::rss-synd::feed_callback" $commandScript] >= 0}]
+} -cleanup {
+    ::testhelpers::reset_logs
+    namespace eval ::rss-synd { set debugOptions $savedDebug }
+    set packagesExisted [lindex $savedPackagesData 0]
+    set packagesList [lindex $savedPackagesData 1]
+    namespace eval ::rss-synd {
+        variable packages
+        catch {array unset packages}
+    }
+    if {$packagesExisted} {
+        namespace eval ::rss-synd { array set packages $packagesList }
+    } else {
+        namespace eval ::rss-synd { unset -nocomplain packages }
+    }
+    proc ::http::geturl $savedGeturlArgs $savedGeturlBody
+    namespace eval ::http { unset -nocomplain lastRedirectArgs }
+    unset -nocomplain ::http::redirectToken
+} -result {1 1 1}
 
 test next_user_agent_without_rotation_returns_first_value {Ohne Rotation wird der erste Eintrag genutzt} -body {
     array set feed {user-agent {"Agent/1" "Agent/2"}}
