@@ -196,6 +196,6 @@ Eggdrop schreibt Skriptmeldungen in die Party-Line (DCC-Chat). Wer den Chat ruhi
 Im Pufferbetrieb werden einzelne Meldungen nicht mehr sofort angezeigt, sondern als kompakte Übersicht nach Ablauf des Intervalls ausgegeben. Mit `immediate` lässt sich das alte Verhalten jederzeit wiederherstellen.
 
 ## Kompatibilität & Versionen
-- Skriptversion git-4bda2c0 vom 03.10.2025. Die Versionsinformationen findest du direkt im Kopfbereich von `rss_synd.tcl`.
+- Skriptversion git-4bda2c0+config-convert vom 03.10.2025. Die Versionsinformationen findest du direkt im Kopfbereich von `rss_synd.tcl`.
 - Benötigt einen Eggdrop mit Tcl-Unterstützung und dem Standardpaket `http`; optionale Features setzen `base64`, `tls` und `Trf` voraus (`package require …` in `rss_synd.tcl`).
 - Für HTTPS-Verbindungen initialisiert das Skript standardmäßig TLS 1.2/1.3 und registriert eigene TLS-Sockets; über `https-allow-legacy` kannst du bei Bedarf ältere Protokolle freischalten.
