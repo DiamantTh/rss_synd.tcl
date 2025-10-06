@@ -641,113 +641,127 @@ proc ::rss-synd::normalize_tls_options {options} {
 }
 
 proc ::rss-synd::setup_tls {{settingsList {}}} {
-        variable tls
-        variable debugOptions
-        array set settings $settingsList
-        set allowLegacy [expr {[info exists settings(https-allow-legacy)] ? $settings(https-allow-legacy) : 0}]
-        set tlsDebug [expr {[dict exists $debugOptions tls] ? [dict get $debugOptions tls] : 0}]
-        set tlsPrefix "\002RSS TLS Debug\002"
-        if {$tlsDebug} {
-                ::rss-synd::log_message debug "$tlsPrefix: Initialisiere TLS (allow-legacy=$allowLegacy)"
-        }
-        if {[info exists tls(configured)] && $tls(configured) && [info exists tls(allowLegacy)] && $tls(allowLegacy) == $allowLegacy} {
-                return 1
-        }
-        set baseOptions [list -require 1 -autoservername 1 -ssl2 0 -ssl3 0 -tls1 0 -tls1_1 0 -tls1_2 1]
-        set modernOptions [concat $baseOptions [list -tls1_3 1]]
-        set tls(configured) 0
-        set optionsNormalized 0
-        if {$tlsDebug} {
-                ::rss-synd::log_message debug "$tlsPrefix: Moderne Parameter: [join $modernOptions { }]"
-        }
-        set modernResult [catch {::tls::init {*}$modernOptions} modernErr]
-        set appliedOptions $modernOptions
-        set tlsDebugRequested [expr {[dict exists $debugOptions tls] && [dict get $debugOptions tls]}]
-        set tls(configured) 0
-        set optionsNormalized 0
-        set modernResult [catch {::tls::init {*}$modernOptions} modernErr]
-        if {$modernResult != 0} {
-                if {[string match "*bad option*" $modernErr] || [string match "*unknown option*" $modernErr]} {
-                        set baseOptions [::rss-synd::normalize_tls_options $baseOptions]
-                        set modernOptions [::rss-synd::normalize_tls_options $modernOptions]
-                        set appliedOptions $modernOptions
-                        set optionsNormalized 1
-                        set modernResult [catch {::tls::init {*}$modernOptions} modernErr]
-                }
-        }
-        if {$modernResult != 0} {
-                if {[string match "*bad option*" $modernErr] || [string match "*unknown option*" $modernErr]} {
-                        set baseOptions [::rss-synd::normalize_tls_options $baseOptions]
-                        set modernOptions [::rss-synd::normalize_tls_options $modernOptions]
-                        set optionsNormalized 1
-                        if {$tlsDebug} {
-                                ::rss-synd::log_message debug "$tlsPrefix: Normalisierte Optionen aufgrund von Kompatibilität"
-                        }
-                        set modernResult [catch {::tls::init {*}$modernOptions} modernErr]
-                }
-        }
-        if {$modernResult != 0} {
-                if {$tlsDebug} {
-                        ::rss-synd::log_message debug "$tlsPrefix: Moderne TLS-Initialisierung schlug fehl: $modernErr"
-                }
-                ::rss-synd::log_message error "\002RSS Fehler\002: TLS-Initialisierung (TLS 1.2/1.3) fehlgeschlagen: $modernErr"
-                if {!$allowLegacy} {
-                        ::rss-synd::log_message info "\002RSS Hinweis\002: Aktiviere 'https-allow-legacy' in den Einstellungen, um ältere Protokolle zu erlauben."
-                        return 0
-                }
+	variable tls
+	variable debugOptions
+
+	array set settings $settingsList
+
+	set allowLegacy [expr {[info exists settings(https-allow-legacy)] ? $settings(https-allow-legacy) : 0}]
+	set tlsDebug [expr {[dict exists $debugOptions tls] ? [dict get $debugOptions tls] : 0}]
+	set tlsDebugRequested $tlsDebug
+	set tlsPrefix "\002RSS TLS Debug\002"
+
+	if {$tlsDebug} {
+		::rss-synd::log_message debug "$tlsPrefix: Initialisiere TLS (allow-legacy=$allowLegacy)"
+	}
+
+	if {[info exists tls(configured)]
+			&& $tls(configured)
+			&& [info exists tls(allowLegacy)]
+			&& $tls(allowLegacy) == $allowLegacy} {
+		return 1
+	}
+
+	set baseOptions [list -require 1 -autoservername 1 -ssl2 0 -ssl3 0 -tls1 0 -tls1_1 0 -tls1_2 1]
+	set modernOptions [concat $baseOptions [list -tls1_3 1]]
+	set appliedOptions $modernOptions
+	set optionsNormalized 0
+
+	if {$tlsDebug} {
+		::rss-synd::log_message debug "$tlsPrefix: Moderne Parameter: [join $modernOptions { }]"
+	}
+
+	set modernResult [catch {::tls::init {*}$modernOptions} modernErr]
+
+	if {$modernResult != 0} {
+		if {[string match "*bad option*" $modernErr] || [string match "*unknown option*" $modernErr]} {
+			set baseOptions [::rss-synd::normalize_tls_options $baseOptions]
+			set modernOptions [::rss-synd::normalize_tls_options $modernOptions]
+			set appliedOptions $modernOptions
+			set optionsNormalized 1
+
+			if {$tlsDebug} {
+				::rss-synd::log_message debug "$tlsPrefix: Normalisierte Optionen aufgrund von Kompatibilität"
+			}
+
+			set modernResult [catch {::tls::init {*}$modernOptions} modernErr]
+		}
+	}
+
+	if {$modernResult != 0} {
+		if {$tlsDebug} {
+			::rss-synd::log_message debug "$tlsPrefix: Moderne TLS-Initialisierung schlug fehl: $modernErr"
+		}
+
+		::rss-synd::log_message error "\002RSS Fehler\002: TLS-Initialisierung (TLS 1.2/1.3) fehlgeschlagen: $modernErr"
+
+		if {!$allowLegacy} {
+			::rss-synd::log_message info "\002RSS Hinweis\002: Aktiviere 'https-allow-legacy' in den Einstellungen, um ältere Protokolle zu erlauben."
 			return 0
 		}
-                set legacyOptions [list -require 1 -autoservername 1 -ssl2 0 -ssl3 0 -tls1 1 -tls1_1 1 -tls1_2 1]
-                if {$optionsNormalized} {
-                        set legacyOptions [::rss-synd::normalize_tls_options $legacyOptions]
-                }
-                if {$tlsDebug} {
-                        ::rss-synd::log_message debug "$tlsPrefix: Versuche Legacy-Parameter: [join $legacyOptions { }]"
-                }
-                set appliedOptions $legacyOptions
-                if {[catch {::tls::init {*}$legacyOptions} legacyErr]} {
-                        ::rss-synd::log_message error "\002RSS Fehler\002: TLS-Initialisierung im Legacy-Modus fehlgeschlagen: $legacyErr"
-                        return 0
-                }
-                ::rss-synd::log_message warning "\002RSS Warnung\002: TLS nutzt Legacy-Protokolle, weil moderne Modi nicht unterstützt werden."
-        }
-        catch {::http::unregister https}
-        if {[catch {::http::register https 443 [list ::rss-synd::tls_socket]} registerErr]} {
-                ::rss-synd::log_message error "\002RSS Fehler\002: HTTPS-Registrierung fehlgeschlagen: $registerErr"
-                return 0
-        }
-        set tls(configured) 1
-        set tls(allowLegacy) $allowLegacy
-        if {$tlsDebug} {
-                ::rss-synd::log_message debug "$tlsPrefix: TLS-Stack erfolgreich initialisiert"
-        if {$tlsDebugRequested} {
-                set optionParts {}
-                if {[expr {[llength $appliedOptions] % 2}] == 0} {
-                        foreach {key value} $appliedOptions {
-                                lappend optionParts "$key $value"
-                        }
-                }
-                if {[llength $optionParts] == 0} {
-                        if {[llength $appliedOptions] == 0} {
-                                set optionText "keine"
-                        } else {
-                                set optionText [join $appliedOptions { }]
-                        }
-                } else {
-                        set optionText [join $optionParts ", "]
-                }
-                if {[info command ::tls::debug] ne ""} {
-                        if {[catch {::tls::debug 1} dbgErr]} {
-                                ::rss-synd::log_message warning "\002RSS Warnung\002: TLS-Debugausgabe konnte nicht aktiviert werden: $dbgErr"
-                        } else {
-                                ::rss-synd::log_message info "\002RSS Debug\002: TLS-Debugausgabe über ::tls::debug aktiviert (Optionen: $optionText)."
-                        }
-                } else {
-                        ::rss-synd::log_message info "\002RSS Debug\002: TLS-Debugmodus angefordert, ::tls::debug nicht verfügbar."
-                        ::rss-synd::log_message info "\002RSS Debug\002: Verwendete TLS-Handshake-Optionen: $optionText."
-                }
-        }
-        return 1
+
+		set legacyOptions [list -require 1 -autoservername 1 -ssl2 0 -ssl3 0 -tls1 1 -tls1_1 1 -tls1_2 1]
+		if {$optionsNormalized} {
+			set legacyOptions [::rss-synd::normalize_tls_options $legacyOptions]
+		}
+		set appliedOptions $legacyOptions
+
+		if {$tlsDebug} {
+			::rss-synd::log_message debug "$tlsPrefix: Versuche Legacy-Parameter: [join $legacyOptions { }]"
+		}
+
+		if {[catch {::tls::init {*}$legacyOptions} legacyErr]} {
+			::rss-synd::log_message error "\002RSS Fehler\002: TLS-Initialisierung im Legacy-Modus fehlgeschlagen: $legacyErr"
+			return 0
+		}
+
+		::rss-synd::log_message warning "\002RSS Warnung\002: TLS nutzt Legacy-Protokolle, weil moderne Modi nicht unterstützt werden."
+	}
+
+	catch {::http::unregister https}
+	if {[catch {::http::register https 443 [list ::rss-synd::tls_socket]} registerErr]} {
+		::rss-synd::log_message error "\002RSS Fehler\002: HTTPS-Registrierung fehlgeschlagen: $registerErr"
+		return 0
+	}
+
+	set tls(configured) 1
+	set tls(allowLegacy) $allowLegacy
+
+	if {$tlsDebug} {
+		::rss-synd::log_message debug "$tlsPrefix: TLS-Stack erfolgreich initialisiert"
+	}
+
+	if {$tlsDebugRequested} {
+		set optionParts {}
+		if {[expr {[llength $appliedOptions] % 2}] == 0} {
+			foreach {key value} $appliedOptions {
+				lappend optionParts "$key $value"
+			}
+		}
+
+		if {[llength $optionParts] == 0} {
+			if {[llength $appliedOptions] == 0} {
+				set optionText "keine"
+			} else {
+				set optionText [join $appliedOptions { }]
+			}
+		} else {
+			set optionText [join $optionParts ", "]
+		}
+
+		if {[info command ::tls::debug] ne ""} {
+			if {[catch {::tls::debug 1} dbgErr]} {
+				::rss-synd::log_message warning "\002RSS Warnung\002: TLS-Debugausgabe konnte nicht aktiviert werden: $dbgErr"
+			} else {
+				::rss-synd::log_message info "\002RSS Debug\002: TLS-Debugausgabe über ::tls::debug aktiviert (Optionen: $optionText)."
+			}
+		} else {
+			::rss-synd::log_message info "\002RSS Debug\002: TLS-Debugmodus angefordert, ::tls::debug nicht verfügbar."
+			::rss-synd::log_message info "\002RSS Debug\002: Verwendete TLS-Handshake-Optionen: $optionText."
+		}
+	}
+
+	return 1
 }
 
 proc ::rss-synd::init {args} {
@@ -757,7 +771,7 @@ proc ::rss-synd::init {args} {
 	variable packages
 	variable settings
 
-	set version(number)	git-8ac21f0+dict-debug
+	set version(number)	git-1f4ec83
 	set version(date)	"2025-10-12"
 
         package require http
@@ -772,7 +786,6 @@ proc ::rss-synd::init {args} {
 	::rss-synd::configure_debug
         }
         ::rss-synd::configure_logging
-        ::rss-synd::configure_debug
 
         foreach feed [array names rss] {
                 array set tmp $default
