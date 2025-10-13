@@ -711,7 +711,7 @@ test settings_loading_failure_aborts_execution {Fehlende Einstellungen brechen d
     interp alias rssFail putlog {} ::testhelpers::capture_putlog
     interp alias rssFail utimer {} ::testhelpers::dummy_timer
     interp alias rssFail killutimer {} ::testhelpers::dummy_timer
-    set expectedPath [file normalize [file join [file dirname $scriptPath] rss-synd-settings.tcl]]
+    set expectedPath [file normalize [file join [file dirname $scriptPath] rss-set.tcl]]
     set expectedError [format {couldn't read file "%s": no such file or directory} $expectedPath]
 } -body {
     set result [catch {interp eval rssFail [list source $scriptPath]} msg opts]

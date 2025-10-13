@@ -3,7 +3,7 @@ namespace import ::tcltest::*
 
 set here [file dirname [info script]]
 set tool [file normalize [file join $here .. tools config-convert.tcl]]
-set sampleToml [file normalize [file join $here .. rss-synd.toml]]
+set sampleToml [file normalize [file join $here .. rss-set.toml]]
 
 if {![file exists $tool]} {
     error "Konverter-Skript nicht gefunden: $tool"
