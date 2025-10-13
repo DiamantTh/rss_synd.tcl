@@ -432,7 +432,7 @@ proc ::rss-synd::load_config {} {
         } else {
                 set scriptDir [file dirname [info script]]
         }
-        set togglesFile [file normalize [file join $scriptDir rss-synd-settings.tcl]]
+        set togglesFile [file normalize [file join $scriptDir rss-set.tcl]]
 
         if {![file exists $togglesFile]} {
                 set err [format {couldn't read file "%s": no such file or directory} $togglesFile]
@@ -491,7 +491,7 @@ proc ::rss-synd::load_config {} {
 
         set tomlFile $settings(config-toml-file)
         if {$tomlFile eq ""} {
-                set tomlFile [file join $scriptDir rss-synd.toml]
+                set tomlFile [file join $scriptDir rss-set.toml]
         }
         set tomlFile [::rss-synd::resolve_path $tomlFile $scriptDir]
 

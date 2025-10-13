@@ -12,7 +12,7 @@ Das Skript `rss_synd.tcl` erweitert Eggdrop-Bots um die Möglichkeit, RSS- und A
 - Optionales Nachbearbeiten der Ausgaben über Tcl-Ausdrücke.
 
 ## Installation
-1. Kopiere `rss_synd.tcl`, `rss-synd-settings.tcl` sowie (bei TOML-Konfiguration) `rss-synd.toml` in das Skriptverzeichnis deines Eggdrop-Bots.
+1. Kopiere `rss_synd.tcl`, `rss-set.tcl` sowie (bei TOML-Konfiguration) `rss-set.toml` in das Skriptverzeichnis deines Eggdrop-Bots.
 2. Ergänze deine `eggdrop.conf` um die Zeile `source scripts/rss-synd.tcl` (Pfad ggf. anpassen).
 
 ### Paketinstallation (optionale Features)
@@ -35,20 +35,20 @@ Das Skript läuft ohne zusätzliche Pakete, jedoch sind bestimmte Funktionen nur
 ## Konfiguration
 ### Konfigurationsformate
 
-`rss-synd-settings.tcl` enthält nur noch Umschaltparameter. Der zentrale Schalter `settings(config-format)` entscheidet, welches Format geladen wird:
+`rss-set.tcl` enthält nur noch Umschaltparameter. Der zentrale Schalter `settings(config-format)` entscheidet, welches Format geladen wird:
 
 ```tcl
 namespace eval ::rss-synd {
-    # "toml" nutzt rss-synd.toml (Standard) und benötigt das Tcllib-Paket "toml".
+    # "toml" nutzt rss-set.toml (Standard) und benötigt das Tcllib-Paket "toml".
     set settings(config-format) toml
 
     # Optional eigene Pfade setzen:
-    # set settings(config-toml-file) "config/rss-synd.toml"
+    # set settings(config-toml-file) "config/rss-set.toml"
     # set settings(config-tcl-file)  "config/rss-synd-legacy.tcl"
 }
 ```
 
-- **TOML**: Die Datei `rss-synd.toml` enthält Abschnitte `[defaults]` und `[feeds.<name>]`. Beispiel:
+- **TOML**: Die Datei `rss-set.toml` enthält Abschnitte `[defaults]` und `[feeds.<name>]`. Beispiel:
 
   ```toml
   [defaults]
