@@ -43,7 +43,7 @@ namespace eval ::rss-synd {
 
         set ctrl2 [format %c 2]
         set ctrl3 [format %c 3]
-        set fallbackOutputDefault [string cat {[} $ctrl2 {@@channel!title@@@@title@@} $ctrl2 {] @@item!title@@@@entry!title@@ - @@item!link@@@@entry!link!=href@@}]
+        set fallbackOutputDefault [string cat {[} $ctrl2 {@@channel!title@@@@title@@} $ctrl2 {] @@item!title@@@@entry!title@@@@published@@ - @@item!link@@@@entry!link!=href@@}]
         set fallbackOutputMs [string cat {[} $ctrl3 {12} $ctrl2 {MS Security bulletins} $ctrl2 $ctrl3 {] } $ctrl3 {10} $ctrl2 {@@item!title@@} $ctrl2 $ctrl3 { - @@item!link@@}]
 
         variable fallbackDefault [list \
@@ -771,8 +771,8 @@ proc ::rss-synd::init {args} {
 	variable packages
 	variable settings
 
-	set version(number)	git-1f4ec83
-	set version(date)	"2025-10-12"
+	set version(number)	git-pubdate
+	set version(date)	"2025-10-17"
 
         package require http
         set packages(base64) [catch {package require base64}]; # http auth
@@ -1952,13 +1952,73 @@ proc ::rss-synd::feed_compare {odata data} {
 # Cookie Parsing Functions
 ##
 
-proc ::rss-synd::cookie_parse {data current} {
-	upvar 1 feed feed
-	set output $feed(output)
+proc ::rss-synd::cookie_extract {data current token eval} {
+        upvar 1 feed feed
 
-	set eval 0
-	if {([info exists feed(evaluate-tcl)]) && ($feed(evaluate-tcl) == 1)} { set eval 1 }
-	set variable_index 0
+        set tmpc [split $token "!"]
+        set cookie [list]
+        set index 0
+
+        foreach piece $tmpc {
+                set tmpp [regexp -nocase -inline -all -- {^(.*?)\((.*?)\)|(.*?)$} $piece]
+
+                if {[lindex $tmpp 3] == ""} {
+                        lappend cookie [lindex $tmpp 2] [lindex $tmpp 1]
+                } else {
+                        lappend cookie 0 [lindex $tmpp 3]
+                }
+        }
+
+        if {[llength $cookie] < 2} {
+                return ""
+        }
+
+        if {[string equal -nocase $feed(tag-name) [lindex $cookie 1]]} {
+                set cookie [[namespace current]::xml_join_tags $feed(tag-list) [lreplace $cookie $index $index $current]]
+        }
+
+        set cookie [[namespace current]::xml_join_tags $feed(tag-feed) $cookie]
+
+        if {[set tmp [[namespace current]::cookie_replace $cookie $data]] == ""} {
+                return ""
+        }
+
+        set tmp [[namespace current]::xml_list_flatten $tmp]
+        set value [string map {"&" "\\\\x26"} [[namespace current]::html_decode $eval $tmp]]
+
+        return [string trim $value]
+}
+
+proc ::rss-synd::entry_publication_suffix {data current eval} {
+        set candidates {
+                "item!pubDate"
+                "entry!published"
+                "entry!updated"
+                "item!dc:date"
+        }
+
+        foreach token $candidates {
+                set value [[namespace current]::cookie_extract $data $current $token $eval]
+                if {$value ne ""} {
+                        return [string cat " \u2013 " $value]
+                }
+        }
+
+        return ""
+}
+
+proc ::rss-synd::cookie_parse {data current} {
+        upvar 1 feed feed
+        set output $feed(output)
+
+        set eval 0
+        if {([info exists feed(evaluate-tcl)]) && ($feed(evaluate-tcl) == 1)} { set eval 1 }
+
+        if {[string match *@@published@@* $output]} {
+                set published [[namespace current]::entry_publication_suffix $data $current $eval]
+                set output [string map {"@@published@@" $published} $output]
+        }
+        set variable_index 0
 
 	set matches [regexp -inline -nocase -all -- {@@(.*?)@@} $output]
 	foreach {match tmpc} $matches {
