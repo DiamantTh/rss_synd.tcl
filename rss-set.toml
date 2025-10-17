@@ -15,7 +15,7 @@ log-interval = 5
 timeout = 60000
 channels = "#channel"
 trigger = "!rss @@feedid@@"
-output = "[\u0002@@channel!title@@@@title@@\u0002] @@item!title@@@@entry!title@@ - @@item!link@@@@entry!link!=href@@"
+output = "[\u0002@@channel!title@@@@title@@\u0002] @@item!title@@@@entry!title@@@@published@@ - @@item!link@@@@entry!link!=href@@"
 user-agent = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",

@@ -5,6 +5,10 @@
 ## Einleitung
 Das Skript `rss_synd.tcl` erweitert Eggdrop-Bots um die Möglichkeit, RSS- und Atom-Feeds automatisiert auszulesen, neue Einträge zu erkennen und sie in IRC-Kanälen anzukündigen. Es unterstützt dabei sichere Verbindungen, benutzerdefinierte Ausgaben und flexible Trigger-Mechanismen.
 
+## Offene Aufgaben
+- **Feed-Erkennung stärken:** Beim Abruf sicherstellen, dass nur valide RSS- oder Atom-Feeds akzeptiert werden und unerwartete Formate nachvollziehbar protokolliert werden.
+- **Eigenes Logging verbessern:** Separates Logger-Konzept evaluieren, um Debug-Informationen gezielter ausgeben und analysieren zu können.
+
 ### Hauptfeatures
 - Regelmäßiges Abrufen und Ankündigen mehrerer RSS-/Atom-Feeds.
 - Unterstützung für HTTP-Authentifizierung, HTTPS und gzip-komprimierte Feeds.
@@ -70,7 +74,7 @@ Die folgenden Optionen kannst du global in der Default-Konfiguration oder pro Fe
 | `url` | Adresse des RSS-/Atom-Feeds. | – | `https://example.tld/feed.xml` |
 | `channels` | Liste der Kanäle für Ankündigungen und Trigger (Leerzeichen-getrennt). | `#channel` | `#news #alerts` |
 | `database` | Pfad zur Datenbankdatei. | – | `./scripts/news.db` |
-| `output` | Nachrichtenformat mit Cookies für Ankündigungen. | `[\002@@channel!title@@@@title@@\002] @@item!title@@@@entry!title@@ - @@item!link@@@@entry!link!=href@@` | `[\002@@channel!title@@\002] @@item!title@@ – @@item!link@@` |
+| `output` | Nachrichtenformat mit Cookies für Ankündigungen. | `[\002@@channel!title@@@@title@@\002] @@item!title@@@@entry!title@@@@published@@ - @@item!link@@@@entry!link!=href@@` | `[\002@@channel!title@@\002] @@item!title@@ – @@item!link@@` |
 | `max-depth` | Maximale Anzahl erlaubter HTTP-Weiterleitungen. | `5` | `3` |
 | `timeout` | Verbindungs-Timeout in Millisekunden. | `60000` | `45000` |
 | `user-agent` | HTTP-User-Agent-Header; akzeptiert einen statischen String oder eine Tcl-Liste von Kandidaten. Mit `user-agent-rotate` lässt sich eine Rotation (z. B. Listen-Round-Robin oder eine eigene Funktion) aktivieren. | Rotierende Liste aktueller Desktop- und Mobil-Browser-Kennungen (siehe unten) | `Statisch: Mozilla/5.0 (compatible; rss-synd/2025.10; +https://example.tld)`<br>`Rotierend: {"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36" "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"} + user-agent-rotate list` |
@@ -79,6 +83,8 @@ Die folgenden Optionen kannst du global in der Default-Konfiguration oder pro Fe
 | `trigger-type` | Ausgabeformat für Trigger `<channel>:<privmsg>` (`0/1` für Channel, `2/3` für User). | `0:2` | `1:3` |
 | `trigger-output` | Anzahl Artikel pro Trigger (`0` deaktiviert). | `3` | `1` |
 | `update-interval` | Abrufintervall in Minuten. | `30` | `60` |
+
+> **Hinweis:** Das Standard-Template nutzt den Sammelplatzhalter `@@published@@`. Er prüft nacheinander `pubDate`, `published`, `updated` und `dc:date` und fügt nur bei vorhandenen Werten einen Gedankenstrich samt Datum an.
 
 ### Optionale Einstellungen
 | Option | Beschreibung | Standard | Beispiel |
@@ -122,6 +128,7 @@ Du kannst die Liste jederzeit anpassen, eigene Marken ergänzen oder wieder auf 
 | `@@entry!link@@` | Link des aktuellen Artikels. | `https://example.tld/post` |
 | `@@entry!link!=href@@` | Wert des `href`-Attributs eines Link-Tags. | `https://example.tld/post` |
 | `@@entry!author!name@@` | Name des Autors im Artikel. | `Jane Doe` |
+| `@@published@@` | Automatisch ermittelter Veröffentlichungszeitpunkt (nutzt `pubDate`, `published`, `updated` oder `dc:date` und fügt nur bei Erfolg ` – Datum` an). | ` – Tue, 01 Oct 2024 12:00:00 +0200` |
 
 ## Beispielkonfigurationen
 
@@ -132,7 +139,7 @@ announce-output = 3
 trigger-type = "0:2"
 channels = "#channel"
 trigger = "!rss @@feedid@@"
-output = "[\u0002@@channel!title@@@@title@@\u0002] @@item!title@@@@entry!title@@ - @@item!link@@@@entry!link!=href@@"
+output = "[\u0002@@channel!title@@@@title@@\u0002] @@item!title@@@@entry!title@@@@published@@ - @@item!link@@@@entry!link!=href@@"
 user-agent = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
@@ -153,7 +160,7 @@ namespace eval ::rss-synd {
         "url"       "https://example.tld/feed.xml"
         "channels"  "#news #alerts"
         "database"  "./scripts/news.db"
-        "output"    "[\002@@channel!title@@@@title@@\002] @@item!title@@ - @@item!link@@"
+        "output"    "[\002@@channel!title@@@@title@@\002] @@item!title@@@@published@@ - @@item!link@@"
         "trigger"   "!news @@feedid@@"
     }
 
@@ -172,7 +179,7 @@ namespace eval ::rss-synd {
         "timeout"               60000
         "channels"              "#channel"
         "trigger"               "!rss @@feedid@@"
-        "output"                "[\002@@channel!title@@@@title@@\002] @@item!title@@@@entry!title@@ - @@item!link@@@@entry!link!=href@@"
+        "output"                "[\002@@channel!title@@@@title@@\002] @@item!title@@@@entry!title@@@@published@@ - @@item!link@@@@entry!link!=href@@"
         "user-agent"            {
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"

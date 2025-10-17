@@ -32,7 +32,7 @@ namespace eval ::rss-synd {
 
 	set ctrl2 [format %c 2]
 	set ctrl3 [format %c 3]
-	set defaultOutput [string cat {[} $ctrl2 {@@channel!title@@@@title@@} $ctrl2 {] @@item!title@@@@entry!title@@ - @@item!link@@@@entry!link!=href@@}]
+        set defaultOutput [string cat {[} $ctrl2 {@@channel!title@@@@title@@} $ctrl2 {] @@item!title@@@@entry!title@@@@published@@ - @@item!link@@@@entry!link!=href@@}]
 	set msBulletinsOutput [string cat {[} $ctrl3 {12} $ctrl2 {MS Security bulletins} $ctrl2 $ctrl3 {] } $ctrl3 {10} $ctrl2 {@@item!title@@} $ctrl2 $ctrl3 { - @@item!link@@}]
 
 	set default [list \
