@@ -3,7 +3,7 @@
 > **English version:** Siehe [README.md](README.md).
 
 ## Einleitung
-Das Skript `rss_synd.tcl` erweitert Eggdrop-Bots um die Möglichkeit, RSS- und Atom-Feeds automatisiert auszulesen, neue Einträge zu erkennen und sie in IRC-Kanälen anzukündigen. Es unterstützt dabei sichere Verbindungen, benutzerdefinierte Ausgaben und flexible Trigger-Mechanismen.
+Das Skript `rss-sync.tcl` erweitert Eggdrop-Bots um die Möglichkeit, RSS- und Atom-Feeds automatisiert auszulesen, neue Einträge zu erkennen und sie in IRC-Kanälen anzukündigen. Es unterstützt dabei sichere Verbindungen, benutzerdefinierte Ausgaben und flexible Trigger-Mechanismen.
 
 ## Offene Aufgaben
 - **Feed-Erkennung stärken:** Beim Abruf sicherstellen, dass nur valide RSS- oder Atom-Feeds akzeptiert werden und unerwartete Formate nachvollziehbar protokolliert werden.
@@ -16,8 +16,8 @@ Das Skript `rss_synd.tcl` erweitert Eggdrop-Bots um die Möglichkeit, RSS- und A
 - Optionales Nachbearbeiten der Ausgaben über Tcl-Ausdrücke.
 
 ## Installation
-1. Kopiere `rss_synd.tcl`, `rss-set.tcl` sowie (bei TOML-Konfiguration) `rss-set.toml` in das Skriptverzeichnis deines Eggdrop-Bots.
-2. Ergänze deine `eggdrop.conf` um die Zeile `source scripts/rss-synd.tcl` (Pfad ggf. anpassen).
+1. Kopiere `rss-sync.tcl`, `rss-set.tcl` sowie (bei TOML-Konfiguration) `rss-set.toml` in das Skriptverzeichnis deines Eggdrop-Bots.
+2. Ergänze deine `eggdrop.conf` um die Zeile `source scripts/rss-sync.tcl` (Pfad ggf. anpassen).
 
 ### Paketinstallation (optionale Features)
 Die folgenden optionalen Funktionen erfordern zusätzliche Tcl-Erweiterungen:
@@ -206,5 +206,5 @@ Im Pufferbetrieb werden einzelne Meldungen nicht mehr sofort angezeigt, sondern 
 
 ## Kompatibilität & Versionen
 
-- Benötigt einen Eggdrop mit Tcl-Unterstützung und dem Standardpaket `http`; optionale Features setzen `base64`, `tls` und `Trf` voraus (`package require …` in `rss_synd.tcl`).
+- Benötigt einen Eggdrop mit Tcl-Unterstützung und dem Standardpaket `http`; optionale Features setzen `base64`, `tls` und `Trf` voraus (`package require …` in `rss-sync.tcl`).
 - Für HTTPS-Verbindungen initialisiert das Skript standardmäßig TLS 1.2/1.3 und registriert eigene TLS-Sockets; über `https-allow-legacy` kannst du bei Bedarf ältere Protokolle freischalten.
