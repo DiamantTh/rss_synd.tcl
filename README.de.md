@@ -65,7 +65,7 @@ namespace eval ::rss-synd {
   channels = "#news #alerts"
   ```
 
-- **Tcl**: Setze `config-format` auf `tcl` und gib optional `config-tcl-file` an. Ohne Pfad verwendet das Skript die eingebauten Fallback-Listen (identisch zur bisherigen Beispielkonfiguration).
+- **Tcl**: Setze `config-format` auf `tcl` und gib optional `config-tcl-file` an. Ohne Pfad verwendet das Skript die eingebauten Fallback-Listen (identisch zur bisherigen Beispielkonfiguration). Beachte, dass diese Fallbacks `trigger-output` auf `0` setzen und Trigger damit absichtlich stumm bleiben, bis du eigene Werte definierst.
 
 Die folgenden Optionen kannst du global in der Default-Konfiguration oder pro Feed festlegen. Spezifische Feed-Werte überschreiben globale Einstellungen.
 

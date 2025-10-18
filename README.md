@@ -66,7 +66,7 @@ namespace eval ::rss-synd {
   channels = "#news #alerts"
   ```
 
-- **Tcl**: Set `config-format` to `tcl` and optionally specify `config-tcl-file`. Without a custom path the script falls back to the built-in lists (matching the legacy sample configuration).
+- **Tcl**: Set `config-format` to `tcl` and optionally specify `config-tcl-file`. Without a custom path the script falls back to the built-in lists (matching the legacy sample configuration). Remember that these fallbacks set `trigger-output` to `0`, keeping triggers silent until you provide your own values.
 
 The following options can be defined globally in the default configuration or per feed. Feed-specific values override global settings.
 
