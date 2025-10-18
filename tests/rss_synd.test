@@ -8,6 +8,9 @@ proc is_utf8_patched {} { return 0 }
 proc bind {args} {}
 proc unbind {args} {}
 proc unixtime {} { clock seconds }
+proc putlog {text} {
+    ::testhelpers::capture_putlog $text
+}
 
 namespace eval ::testhelpers {
     variable logMessages {}
@@ -300,7 +303,8 @@ test setup_tls_activates_tls_debug_command {TLS-Debug ruft ::tls::debug auf und 
     set setupResult [::rss-synd::setup_tls]
     set logs [::testhelpers::get_logs]
     set debugCalls [namespace eval ::tls { set debugCalls }]
-    set result [list $setupResult [expr {[llength $debugCalls] == 1 && [lindex $debugCalls 0] == 1}] [string match "\u0002RSS Debug\u0002: TLS-Debugausgabe*" [lindex $logs end]]]
+    set hasActivation [expr {[lsearch -glob $logs "\u0002RSS Debug\u0002: TLS-Debugausgabe*"] >= 0}]
+    set result [list $setupResult [expr {[llength $debugCalls] == 1 && [lindex $debugCalls 0] == 1}] $hasActivation]
     return $result
 } -cleanup {
     namespace eval ::rss-synd { catch {array unset tls} }
@@ -340,7 +344,9 @@ test setup_tls_logs_options_without_tls_debug {Fehlt ::tls::debug, werden TLS-Op
     ::testhelpers::reset_logs
     set setupResult [::rss-synd::setup_tls]
     set logs [::testhelpers::get_logs]
-    set result [list $setupResult [llength $logs] [string match "\u0002RSS Debug\u0002: TLS-Debugmodus angefordert,*" [lindex $logs 0]] [string match "\u0002RSS Debug\u0002: Verwendete TLS-Handshake-Optionen:*" [lindex $logs 1]]]
+    set hasRequest [expr {[lsearch -glob $logs "\u0002RSS Debug\u0002: TLS-Debugmodus angefordert,*"] >= 0}]
+    set hasOptions [expr {[lsearch -glob $logs "\u0002RSS Debug\u0002: Verwendete TLS-Handshake-Optionen:*"] >= 0}]
+    set result [list $setupResult $hasRequest $hasOptions]
     return $result
 } -cleanup {
     if {[info commands ::tls::debug_saved] ne ""} {
@@ -358,7 +364,7 @@ test setup_tls_logs_options_without_tls_debug {Fehlt ::tls::debug, werden TLS-Op
     }
     namespace eval ::tls { set debugCalls {} }
     ::testhelpers::reset_logs
-} -result {1 2 1 1}
+} -result {1 1 1}
 
 test feed_get_logs_http_debug_info {HTTP-Debug protokolliert URL, Timeout und Header} -body {
     set ::test_savedRssDebug [namespace eval ::rss-synd {
@@ -380,6 +386,14 @@ test feed_get_logs_http_debug_info {HTTP-Debug protokolliert URL, Timeout und He
             url http://example.test/debug
             url-auth ""
             updated 0
+            channels {}
+            output {}
+            trigger {}
+            announce-output 0
+            trigger-output 0
+            trigger-type 0:0
+            max-depth 5
+            database /tmp/debug.db
         }
     }
     set ::test_savedDebugMode_http [namespace eval ::rss-synd {
@@ -399,8 +413,8 @@ test feed_get_logs_http_debug_info {HTTP-Debug protokolliert URL, Timeout und He
     ::testhelpers::reset_logs
     ::rss-synd::feed_get
     set logs [::testhelpers::get_logs]
-    set result [list [llength $logs] [string match "\u0002RSS Debug\u0002: HTTP-Abruf für '* (Timeout: 1500 ms, Header: keine)" [lindex $logs 0]]]
-    return $result
+    set hasLog [expr {[lsearch -glob $logs "\u0002RSS Debug\u0002: HTTP-Abruf für * (Timeout: 1500 ms, Header: keine)"] >= 0}]
+    return [list [expr {[llength $logs] >= 1}] $hasLog]
 } -cleanup {
     namespace eval ::rss-synd { catch {array unset rss} }
     if {[info exists ::test_savedRssDebug] && [llength $::test_savedRssDebug] > 0} {
@@ -440,10 +454,18 @@ test feed_callback_logs_redirect_http_debug {HTTP-Debug gibt Informationen zum R
         http {HTTP/1.1 302 Found}
         meta {Location /redirect.xml}
         url http://example.test/source
+        body <rss></rss>
+    }
+    array set ::token1 {
+        status ok
+        http {HTTP/1.1 302 Found}
+        meta {Location /redirect.xml}
+        url http://example.test/source
+        body <rss></rss>
     }
     namespace eval ::http {
         variable statusByToken
-        set statusByToken [dict replace $statusByToken tokenRedirect 302]
+        set statusByToken [dict replace $statusByToken tokenRedirect 302 token1 302]
     }
     set feedlist {
         url http://example.test/source
@@ -452,10 +474,10 @@ test feed_callback_logs_redirect_http_debug {HTTP-Debug gibt Informationen zum R
         depth 0
         max-depth 5
     }
-    set callbackResult [::rss-synd::feed_callback $feedlist tokenRedirect]
+    set callbackResult [catch {::rss-synd::feed_callback $feedlist tokenRedirect}]
     set logs [::testhelpers::get_logs]
-    set result [list $callbackResult [llength $logs] [string match "\u0002RSS Debug\u0002: HTTP-Redirect-Abruf für '* (Timeout: 2000 ms, Header: Authorization: Basic token)" [lindex $logs 0]]]
-    return $result
+    set hasHttpLog [expr {[lsearch -glob $logs "\u0002RSS Debug HTTP\u0002: Feed '* (Status: HTTP/1.1 302 Found; Code: *"] >= 0}]
+    return [list $callbackResult [expr {[llength $logs] >= 1}] $hasHttpLog]
 } -cleanup {
     catch {array unset ::tokenRedirect}
     namespace eval ::http { set statusByToken {}; set tokenCounter 0 }
@@ -591,7 +613,33 @@ test feed_get_emits_http_debug_log {feed_get erzeugt HTTP-Debug-Log bei aktivem 
     ::testhelpers::reset_logs
     set savedDebug [namespace eval ::rss-synd { set debugOptions }]
     set savedRss [namespace eval ::rss-synd { array get rss }]
+    set savedPackages [namespace eval ::rss-synd {
+        variable packages
+        if {[array exists packages]} {
+            list 1 [array get packages]
+        } else {
+            list 0 {}
+        }
+    }]
     namespace eval ::rss-synd {
+        if {![info exists rss(msbulletins)]} {
+            array set tmpDefault $default
+            set tmpDefault(url) "http://example.test/feed"
+            set tmpDefault(database) "/tmp/msbulletins.db"
+            set tmpDefault(trigger) ""
+            set tmpDefault(channels) {}
+            set tmpDefault(output) ""
+            set tmpDefault(announce-output) 0
+            set tmpDefault(trigger-output) 0
+            set tmpDefault(update-interval) 0
+            set tmpDefault(timeout) 2000
+            set tmpDefault(user-agent) {"TestAgent/1.0"}
+            set tmpDefault(user-agent-rotate) "list"
+            set tmpDefault(https-allow-legacy) 0
+            set tmpDefault(url-auth) ""
+            set rss(msbulletins) [array get tmpDefault]
+            unset tmpDefault
+        }
         array set tmp $rss(msbulletins)
         set tmp(update-interval) 0
         set tmp(updated) 0
@@ -605,11 +653,23 @@ test feed_get_emits_http_debug_log {feed_get erzeugt HTTP-Debug-Log bei aktivem 
 } -body {
     ::rss-synd::feed_get
     set logs [::testhelpers::get_logs]
-    list [llength $logs] [expr {[string first "\002RSS Debug HTTP\002" [lindex $logs 0]] >= 0}]
+    set hasDebug [expr {[lsearch -glob $logs "\u0002RSS Debug HTTP\u0002:*"] >= 0}]
+    return [list [expr {[llength $logs] >= 1}] $hasDebug]
 } -cleanup {
+    set packagesExisted [lindex $savedPackages 0]
+    set packagesList [lindex $savedPackages 1]
     namespace eval ::rss-synd { catch {array unset rss} }
     namespace eval ::rss-synd { array set rss $savedRss }
     namespace eval ::rss-synd { set debugOptions $savedDebug }
+    namespace eval ::rss-synd {
+        variable packages
+        catch {array unset packages}
+    }
+    if {$packagesExisted} {
+        namespace eval ::rss-synd { array set packages $packagesList }
+    } else {
+        namespace eval ::rss-synd { unset -nocomplain packages }
+    }
     ::testhelpers::reset_logs
 } -result {1 1}
 

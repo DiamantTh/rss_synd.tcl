@@ -29,7 +29,7 @@ user-agent-rotate = "list"
 https-allow-legacy = 0
 
 [feeds.msbulletins]
-url = "http://technet.microsoft.com/en-us/security/rss/bulletin"
+url = "https://technet.microsoft.com/en-us/security/rss/bulletin"
 channels = "#channel"
 database = "/path to dir/msbulletins.db"
 output = "[\u000312\u0002MS Security bulletins\u0002\u0003] \u000310\u0002@@item!title@@\u0002\u0003 - @@item!link@@"
