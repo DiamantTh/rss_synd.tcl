@@ -17,7 +17,7 @@ The `rss-synd.tcl` script extends Eggdrop bots with the ability to automatically
 
 ## Installation
 1. Copy `rss-synd.tcl` into your Eggdrop bot's script directory.
-2. Duplicate `rss-set.example.tcl` as `rss-set.tcl` and adjust the values to your needs. When using the TOML format, also copy `rss-set.example.toml` to `rss-set.toml`. The example files are templates only and are never loaded automatically by the script.
+2. Duplicate `rss-set.example.tcl` as `rss-set.tcl` and adjust the values to your needs. When using the TOML format, also copy `rss-set.example.toml` to `rss-set.toml`.
 3. Add the line `source scripts/rss-synd.tcl` to your `eggdrop.conf` (adjust the path as needed).
 
 ### Package installation (optional features)

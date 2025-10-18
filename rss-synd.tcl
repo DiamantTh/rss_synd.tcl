@@ -460,12 +460,18 @@ proc ::rss-synd::load_config {} {
                 set scriptDir [file dirname [info script]]
         }
         set togglesFile [file normalize [file join $scriptDir rss-set.tcl]]
+        set togglesExample [file normalize [file join $scriptDir rss-set.example.tcl]]
+        set usingExampleToggles 0
 
         if {![file exists $togglesFile]} {
-                catch {array unset settings}
-                array set settings {config-format toml config-tcl-file {} config-toml-file {}}
-                ::rss-synd::use_fallback_config "\002RSS Warnung\002: Einstellungsdatei '$togglesFile' fehlt. Bitte 'rss-set.example.tcl' nach 'rss-set.tcl' kopieren und anpassen."
-                return
+                if {[file exists $togglesExample]} {
+                        set togglesFile $togglesExample
+                        set usingExampleToggles 1
+                } else {
+                        set err [format {couldn't read file "%s": no such file or directory} $togglesFile]
+                        ::rss-synd::log_message error "Error: Could not load settings file '$togglesFile': $err"
+                        error $err
+                }
         }
 
         set preserved {}
@@ -483,6 +489,10 @@ proc ::rss-synd::load_config {} {
         if {[catch {source $togglesFile} err]} {
                 ::rss-synd::use_fallback_config "\002RSS Warnung\002: Umschaltdatei konnte nicht geladen werden: $err"
                 return
+        }
+
+        if {$usingExampleToggles} {
+                ::rss-synd::log_message warning "\002RSS Hinweis\002: Beispiel-Umschaltdatei '$togglesFile' wird verwendet. Bitte nach 'rss-set.tcl' kopieren und anpassen."
         }
 
         if {![info exists settings(config-format)] || $settings(config-format) eq ""} {
@@ -522,19 +532,31 @@ proc ::rss-synd::load_config {} {
                 set tomlFile [file join $scriptDir rss-set.toml]
         }
         set tomlFile [::rss-synd::resolve_path $tomlFile $scriptDir]
+        set tomlExample [file normalize [file join $scriptDir rss-set.example.toml]]
+        set usingExampleToml 0
+
         if {[catch {package require toml} err]} {
                 ::rss-synd::use_fallback_config "\002RSS Fehler\002: toml-Paket nicht verfügbar ($err), nutze Tcl-Fallback."
                 return
         }
 
         if {![file exists $tomlFile]} {
-                ::rss-synd::use_fallback_config "\002RSS Fehler\002: TOML-Datei '$tomlFile' nicht gefunden, nutze Tcl-Fallback. Bitte 'rss-set.example.toml' nach 'rss-set.toml' kopieren und anpassen."
-                return
+                if {$settings(config-toml-file) eq "" && [file exists $tomlExample]} {
+                        set tomlFile $tomlExample
+                        set usingExampleToml 1
+                } else {
+                        ::rss-synd::use_fallback_config "\002RSS Fehler\002: TOML-Datei '$tomlFile' nicht gefunden, nutze Tcl-Fallback."
+                        return
+                }
         }
 
         if {[catch {set parsed [::toml::parsefile $tomlFile]} err]} {
                 ::rss-synd::use_fallback_config "\002RSS Fehler\002: TOML-Datei konnte nicht gelesen werden: $err"
                 return
+        }
+
+        if {$usingExampleToml} {
+                ::rss-synd::log_message warning "\002RSS Hinweis\002: Beispiel-TOML '$tomlFile' wird verwendet. Bitte nach 'rss-set.toml' kopieren und anpassen."
         }
 
         set defaultList {}
