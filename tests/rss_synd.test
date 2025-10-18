@@ -11,13 +11,22 @@ proc unixtime {} { clock seconds }
 proc putlog {text} {
     ::testhelpers::capture_putlog $text
 }
+proc putdcc {idx text} {
+    ::testhelpers::capture_putdcc $idx $text
+}
 
 namespace eval ::testhelpers {
     variable logMessages {}
+    variable dccMessages {}
 
     proc capture_putlog {text} {
         variable logMessages
         lappend logMessages $text
+    }
+
+    proc capture_putdcc {idx text} {
+        variable dccMessages
+        lappend dccMessages [list $idx $text]
     }
 
     proc dummy_timer {args} {
@@ -36,6 +45,16 @@ namespace eval ::testhelpers {
     proc get_logs {} {
         variable logMessages
         return $logMessages
+    }
+
+    proc reset_dcc {} {
+        variable dccMessages
+        set dccMessages {}
+    }
+
+    proc get_dcc {} {
+        variable dccMessages
+        return $dccMessages
     }
 }
 
@@ -369,6 +388,171 @@ test setup_tls_logs_options_without_tls_debug {Fehlt ::tls::debug, werden TLS-Op
     namespace eval ::tls { set debugCalls {} }
     ::testhelpers::reset_logs
 } -result {1 1 1}
+
+test tls_environment_check_reports_missing_tls {TLS-Umgebungscheck meldet fehlendes TLS-Paket} -setup {
+    set ::test_savedPackages_tlsMissing [namespace eval ::rss-synd {
+        variable packages
+        array get packages
+    }]
+    namespace eval ::rss-synd {
+        variable packages
+        set packages(tls) 1
+    }
+} -body {
+    set status [::rss-synd::tls_environment_check {} 0]
+    set warnings [dict get $status warnings]
+    set hasWarning [expr {[lsearch -exact $warnings "TLS-Paket 'tls' ist nicht verfügbar."] >= 0}]
+    list [dict get $status available] $hasWarning
+} -cleanup {
+    namespace eval ::rss-synd {
+        variable packages
+        array unset packages
+        array set packages $::test_savedPackages_tlsMissing
+    }
+    unset ::test_savedPackages_tlsMissing
+} -result {0 1}
+
+test tls_environment_check_validates_paths {TLS-Umgebungscheck bestätigt konfigurierte Zertifikate} -setup {
+    set ::test_tls_tempDir [makeDirectory tls_env]
+    set ::test_tls_caFile [makeFile "CA" [file join $::test_tls_tempDir ca.pem]]
+    set ::test_tls_certFile [makeFile "CERT" [file join $::test_tls_tempDir client.crt]]
+    set ::test_tls_keyFile [makeFile "KEY" [file join $::test_tls_tempDir client.key]]
+
+    set ::test_savedDefault_tlsEnv [namespace eval ::rss-synd {
+        variable default
+        list [info exists default] [expr {[info exists default] ? $default : {}}]
+    }]
+    set ::test_savedPackages_tlsEnv [namespace eval ::rss-synd {
+        variable packages
+        array get packages
+    }]
+
+    set replacements [dict create \
+        tls-ca-file $::test_tls_caFile \
+        tls-ca-dir $::test_tls_tempDir \
+        tls-cert-file $::test_tls_certFile \
+        tls-key-file $::test_tls_keyFile]
+
+    set existing [lindex $::test_savedDefault_tlsEnv 1]
+    set newDefault {}
+    foreach {key value} $existing {
+        if {[dict exists $replacements $key]} {
+            lappend newDefault $key [dict get $replacements $key]
+            dict unset replacements $key
+        } else {
+            lappend newDefault $key $value
+        }
+    }
+    dict for {key value} $replacements {
+        lappend newDefault $key $value
+    }
+
+    namespace eval ::rss-synd {
+        variable default
+        set default $::newDefault
+        variable packages
+        set packages(tls) 0
+    }
+    unset newDefault
+} -body {
+    set status [::rss-synd::tls_environment_check {} 0]
+    set warnings [dict get $status warnings]
+    set caStatus [dict get [dict get $status paths tls-ca-file] status]
+    set certStatus [dict get [dict get $status paths tls-cert-file] status]
+    list [dict get $status available] [llength $warnings] $caStatus $certStatus
+} -cleanup {
+    if {[info exists ::test_savedDefault_tlsEnv]} {
+        if {[lindex $::test_savedDefault_tlsEnv 0]} {
+            namespace eval ::rss-synd {
+                variable default
+                set default [lindex $::test_savedDefault_tlsEnv 1]
+            }
+        } else {
+            namespace eval ::rss-synd { unset -nocomplain default }
+        }
+        unset ::test_savedDefault_tlsEnv
+    }
+    namespace eval ::rss-synd {
+        variable packages
+        array unset packages
+        array set packages $::test_savedPackages_tlsEnv
+    }
+    unset ::test_savedPackages_tlsEnv
+    removeFile $::test_tls_caFile
+    removeFile $::test_tls_certFile
+    removeFile $::test_tls_keyFile
+    removeDirectory $::test_tls_tempDir
+    unset ::test_tls_caFile ::test_tls_certFile ::test_tls_keyFile ::test_tls_tempDir
+} -result {1 0 ok ok}
+
+test dcc_tls_check_outputs_summary {DCC-Befehl .tlscheck gibt Status und Warnungen aus} -setup {
+    ::testhelpers::reset_dcc
+    set ::test_tls_tempDirDcc [makeDirectory tls_dcc]
+    set ::test_tls_certFileDcc [makeFile "CERT" [file join $::test_tls_tempDirDcc client.crt]]
+
+    set ::test_savedDefault_tlsDcc [namespace eval ::rss-synd {
+        variable default
+        list [info exists default] [expr {[info exists default] ? $default : {}}]
+    }]
+    set ::test_savedPackages_tlsDcc [namespace eval ::rss-synd {
+        variable packages
+        array get packages
+    }]
+
+    set replacements [dict create \
+        tls-cert-file $::test_tls_certFileDcc \
+        tls-key-file ""]
+    set existing [lindex $::test_savedDefault_tlsDcc 1]
+    set newDefault {}
+    foreach {key value} $existing {
+        if {[dict exists $replacements $key]} {
+            lappend newDefault $key [dict get $replacements $key]
+            dict unset replacements $key
+        } else {
+            lappend newDefault $key $value
+        }
+    }
+    dict for {key value} $replacements {
+        lappend newDefault $key $value
+    }
+
+    namespace eval ::rss-synd {
+        variable default
+        set default $::newDefault
+        variable packages
+        set packages(tls) 0
+    }
+    unset newDefault
+} -body {
+    ::rss-synd::dcc_tls_check test 5 ""
+    set messages [::testhelpers::get_dcc]
+    set texts [lmap entry $messages {lindex $entry 1}]
+    set firstLine [lindex $texts 0]
+    set warningIndex [lsearch -exact $texts "Warnung: Client-Zertifikat ist gesetzt, aber kein Client-Schlüssel angegeben."]
+    list [string match "TLS-Check:*" $firstLine] [expr {$warningIndex >= 0}]
+} -cleanup {
+    if {[info exists ::test_savedDefault_tlsDcc]} {
+        if {[lindex $::test_savedDefault_tlsDcc 0]} {
+            namespace eval ::rss-synd {
+                variable default
+                set default [lindex $::test_savedDefault_tlsDcc 1]
+            }
+        } else {
+            namespace eval ::rss-synd { unset -nocomplain default }
+        }
+        unset ::test_savedDefault_tlsDcc
+    }
+    namespace eval ::rss-synd {
+        variable packages
+        array unset packages
+        array set packages $::test_savedPackages_tlsDcc
+    }
+    unset ::test_savedPackages_tlsDcc
+    removeFile $::test_tls_certFileDcc
+    removeDirectory $::test_tls_tempDirDcc
+    unset ::test_tls_certFileDcc ::test_tls_tempDirDcc
+    ::testhelpers::reset_dcc
+} -result {1 1}
 
 test feed_get_logs_http_debug_info {HTTP-Debug protokolliert URL, Timeout und Header} -body {
     set ::test_savedRssDebug [namespace eval ::rss-synd {

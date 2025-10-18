@@ -63,7 +63,11 @@ namespace eval ::rss-synd {
 		] \
 		"user-agent-rotate"	"list" \
 		"https-allow-legacy"	0 \
-	]
+                "tls-ca-file"           "" \
+                "tls-ca-dir"            "" \
+                "tls-cert-file"         "" \
+                "tls-key-file"          "" \
+        ]
 
 	if {[array exists rss]} {
 		array unset rss

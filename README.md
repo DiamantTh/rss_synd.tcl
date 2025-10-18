@@ -93,6 +93,10 @@ The following options can be defined globally in the default configuration or pe
 | Option | Description | Default | Example |
 | --- | --- | --- | --- |
 | `https-allow-legacy` | Allows TLS 1.0/1.1 as a fallback (insecure). | `0` | `1` |
+| `tls-ca-file` | Absolute or relative path to a trusted CA bundle. Validated during the TLS environment check. | *(empty)* | `config/tls/ca.pem` |
+| `tls-ca-dir` | Directory that contains CA certificates for verification. | *(empty)* | `config/tls/ca` |
+| `tls-cert-file` | Client certificate used for mutual TLS. Requires a matching `tls-key-file`. | *(empty)* | `config/tls/client.crt` |
+| `tls-key-file` | Private key for the client certificate. Requires `tls-cert-file`. | *(empty)* | `config/tls/client.key` |
 | `debug-mode` | Enables verbose debugging. Pass a Tcl list with any of `http`, `tls`, or `all`. `http` logs outgoing request details, while `tls` activates `::tls::debug` (and logs the applied TLS options if the command is missing). | `{}` | `{http tls}` |
 | `log-mode` | Logging strategy for Eggdrop’s console output. Use `immediate` for direct `putlog` calls or `buffered` to collect messages and emit summaries. | `immediate` | `buffered` |
 | `log-interval` | Interval in minutes before buffered log summaries are flushed. Ignored when `log-mode` is `immediate`. | `5` | `10` |
@@ -105,6 +109,10 @@ The following options can be defined globally in the default configuration or pe
 | `output-order` | Order of items (`0` = oldest→newest, `1` = newest→oldest). | `0` | `1` |
 | `charset` | Target character set for messages. | System default | `utf-8` |
 | `feedencoding` | Forces a character set when reading the feed. | – | `cp1251` |
+
+### TLS environment check
+
+On startup the script performs a TLS environment check. It resolves and validates the configured certificate paths, logs a compact status message, and reports any issues such as missing files or unreadable directories. Use the party-line command `.tlscheck` to print the current TLS status together with all collected warnings at any time.
 
 ### Built-in User-Agent rotation
 

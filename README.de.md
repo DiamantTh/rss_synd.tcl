@@ -92,6 +92,10 @@ Die folgenden Optionen kannst du global in der Default-Konfiguration oder pro Fe
 | Option | Beschreibung | Standard | Beispiel |
 | --- | --- | --- | --- |
 | `https-allow-legacy` | Erlaubt TLS 1.0/1.1 als Fallback (unsicher). | `0` | `1` |
+| `tls-ca-file` | Absoluter oder relativer Pfad zu einer vertrauenswürdigen CA-Bündeldatei. Wird beim TLS-Umgebungscheck geprüft. | *(leer)* | `config/tls/ca.pem` |
+| `tls-ca-dir` | Verzeichnis mit CA-Zertifikaten für die Validierung. | *(leer)* | `config/tls/ca` |
+| `tls-cert-file` | Client-Zertifikat für Mutual TLS. Benötigt einen passenden `tls-key-file`. | *(leer)* | `config/tls/client.crt` |
+| `tls-key-file` | Privater Schlüssel zum Client-Zertifikat. Benötigt `tls-cert-file`. | *(leer)* | `config/tls/client.key` |
 | `debug-mode` | Aktiviert detailliertes Debugging. Liste mit `http`, `tls` oder `all`. `http` protokolliert URL, Timeout und Header der Abrufe, `tls` versucht `::tls::debug` zu nutzen und protokolliert andernfalls die verwendeten TLS-Optionen. | `{}` | `{http tls}` |
 | `log-mode` | Logging-Strategie für die Eggdrop-Konsole. `immediate` schreibt Meldungen sofort, `buffered` sammelt sie und fasst sie zusammen. | `immediate` | `buffered` |
 | `log-interval` | Minuten bis zur Ausgabe einer zusammengefassten Log-Nachricht, wenn `log-mode` auf `buffered` steht. | `5` | `10` |
@@ -104,6 +108,10 @@ Die folgenden Optionen kannst du global in der Default-Konfiguration oder pro Fe
 | `output-order` | Reihenfolge der Artikel (`0` = älteste→neueste, `1` = neueste→älteste). | `0` | `1` |
 | `charset` | Zielzeichensatz für Nachrichten. | Systemstandard | `utf-8` |
 | `feedencoding` | Erzwingt einen Zeichensatz beim Einlesen des Feeds. | – | `cp1251` |
+
+### TLS-Umgebungscheck
+
+Beim Start führt das Skript einen TLS-Umgebungscheck aus. Dabei werden konfigurierte Zertifikatspfade aufgelöst, geprüft und als kompaktes Statusprotokoll ausgegeben; fehlende Dateien oder unlesbare Verzeichnisse werden als Warnung markiert. Über den Party-Line-Befehl `.tlscheck` lässt sich der aktuelle TLS-Status inklusive aller Warnungen jederzeit abrufen.
 
 ### Vorkonfigurierte User-Agent-Rotation
 

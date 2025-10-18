@@ -69,6 +69,10 @@ namespace eval ::rss-synd {
                 ] \
                 "user-agent-rotate"     list \
                 "https-allow-legacy"    0 \
+                "tls-ca-file"           {} \
+                "tls-ca-dir"            {} \
+                "tls-cert-file"         {} \
+                "tls-key-file"          {} \
         ]
 
         variable fallbackFeeds [dict create \
@@ -84,6 +88,14 @@ namespace eval ::rss-synd {
                         "output-order"          0 \
                 ] \
         ]
+
+        variable tlsStatus [dict create \
+                summary {} \
+                warnings {} \
+                available 0 \
+                version {} \
+                paths {} \
+                timestamp 0]
 }
 
 proc ::rss-synd::log_preview {text} {
@@ -635,11 +647,174 @@ proc ::rss-synd::configuration_to_dict {} {
 
 ::rss-synd::load_config
 
+proc ::rss-synd::collect_tls_environment {{settingsList {}}} {
+        variable default
+        variable fallbackDefault
+        variable scriptBaseDir
+        variable packages
+
+        set configList {}
+        if {[llength $settingsList] > 0} {
+                set configList $settingsList
+        } elseif {[info exists default] && [llength $default] > 0} {
+                set configList $default
+        } else {
+                set configList $fallbackDefault
+        }
+
+        array set cfg {}
+        if {[llength $configList] > 0} {
+                array set cfg $configList
+        }
+
+        if {[info exists scriptBaseDir] && $scriptBaseDir ne ""} {
+                set baseDir $scriptBaseDir
+        } else {
+                set baseDir [file dirname [info script]]
+        }
+
+        set labelMap [dict create \
+                tls-ca-file "CA-Datei" \
+                tls-ca-dir "CA-Verzeichnis" \
+                tls-cert-file "Client-Zertifikat" \
+                tls-key-file "Client-Schlüssel"]
+        set typeMap [dict create \
+                tls-ca-file file \
+                tls-ca-dir dir \
+                tls-cert-file file \
+                tls-key-file file]
+
+        set optionInfo [dict create]
+        set warnings {}
+
+        dict for {key label} $labelMap {
+                set type [dict get $typeMap $key]
+                set configured 0
+                set original ""
+                set resolved ""
+                set status "nicht gesetzt"
+                set valid 0
+
+                if {[info exists cfg($key)] && $cfg($key) ne ""} {
+                        set configured 1
+                        set original $cfg($key)
+                        set resolved [::rss-synd::resolve_path $original $baseDir]
+                        set status "ok"
+                        set valid 1
+
+                        if {![file exists $resolved]} {
+                                set valid 0
+                                set status "fehlt"
+                                lappend warnings "$label '$resolved' wurde nicht gefunden."
+                        } elseif {$type eq "dir" && ![file isdirectory $resolved]} {
+                                set valid 0
+                                set status "kein Verzeichnis"
+                                lappend warnings "$label '$resolved' ist kein Verzeichnis."
+                        } elseif {$type eq "file" && ![file isfile $resolved]} {
+                                set valid 0
+                                set status "keine Datei"
+                                lappend warnings "$label '$resolved' ist keine Datei."
+                        }
+
+                        if {$valid && ![file readable $resolved]} {
+                                set valid 0
+                                set status "nicht lesbar"
+                                lappend warnings "$label '$resolved' ist nicht lesbar."
+                        }
+                }
+
+                set entry [dict create \
+                        configured $configured \
+                        original $original \
+                        resolved $resolved \
+                        status $status \
+                        valid $valid \
+                        type $type]
+                dict set optionInfo $key $entry
+        }
+
+        set certInfo [dict get $optionInfo tls-cert-file]
+        set keyInfo [dict get $optionInfo tls-key-file]
+        if {[dict get $certInfo configured] && ![dict get $keyInfo configured]} {
+                lappend warnings "Client-Zertifikat ist gesetzt, aber kein Client-Schlüssel angegeben."
+        }
+        if {[dict get $keyInfo configured] && ![dict get $certInfo configured]} {
+                lappend warnings "Client-Schlüssel ist gesetzt, aber kein Client-Zertifikat angegeben."
+        }
+
+        set available 0
+        if {[info exists packages] && [array exists packages] && [info exists packages(tls)]} {
+                if {$packages(tls) == 0} {
+                        set available 1
+                }
+        } elseif {[catch {package present tls}]} {
+                # keep available 0
+        } else {
+                set available 1
+        }
+
+        set version ""
+        if {$available} {
+                if {[catch {package present tls} versionValue] == 0} {
+                        set version $versionValue
+                } elseif {[catch {package provide tls} provided] == 0 && $provided ne ""} {
+                        set version $provided
+                } elseif {[info commands ::tls::version] ne ""} {
+                        set version [::tls::version]
+                }
+        } else {
+                        lappend warnings "TLS-Paket 'tls' ist nicht verfügbar."
+        }
+
+        set summaryParts {}
+        if {$available} {
+                lappend summaryParts "Paket=verfügbar"
+        } else {
+                lappend summaryParts "Paket=fehlt"
+        }
+        if {$available && $version ne ""} {
+                lappend summaryParts "Version=$version"
+        }
+
+        dict for {key label} $labelMap {
+                set entry [dict get $optionInfo $key]
+                lappend summaryParts "$label=[dict get $entry status]"
+        }
+
+        set summary [join $summaryParts ", "]
+
+        set info [dict create]
+        dict set info available $available
+        dict set info version $version
+        dict set info warnings $warnings
+        dict set info paths $optionInfo
+        dict set info summary $summary
+        dict set info timestamp [clock seconds]
+
+        return $info
+}
+
+proc ::rss-synd::tls_environment_check {{settingsList {}} {emitLogs 1}} {
+        variable tlsStatus
+
+        set info [::rss-synd::collect_tls_environment $settingsList]
+        set tlsStatus $info
+
+        if {$emitLogs} {
+                ::rss-synd::log_message info "\002RSS TLS\002: [dict get $info summary]"
+                foreach warn [dict get $info warnings] {
+                        ::rss-synd::log_message warning "\002RSS Warnung\002: $warn"
+                }
+        }
+
+        return $info
+}
+
 proc ::rss-synd::tls_socket {args} {
-	variable tls
+        variable tls
         if {[catch {::tls::socket {*}$args} socket options]} {
                 ::rss-synd::log_message warning "\002RSS Warnung\002: TLS-Verbindung fehlgeschlagen: $socket"
-		error $socket
+                error $socket
 	}
 	return $socket
 }
@@ -656,15 +831,34 @@ proc ::rss-synd::normalize_tls_options {options} {
 }
 
 proc ::rss-synd::setup_tls {{settingsList {}}} {
-	variable tls
-	variable debugOptions
+        variable tls
+        variable debugOptions
 
-	array set settings $settingsList
+        array set settings $settingsList
 
-	set allowLegacy [expr {[info exists settings(https-allow-legacy)] ? $settings(https-allow-legacy) : 0}]
-	set tlsDebug [expr {[dict exists $debugOptions tls] ? [dict get $debugOptions tls] : 0}]
-	set tlsDebugRequested $tlsDebug
-	set tlsPrefix "\002RSS TLS Debug\002"
+        set envInfo [::rss-synd::collect_tls_environment $settingsList]
+        set optionInfo [dict get $envInfo paths]
+
+        set customOptions {}
+        set optionMap [list \
+                tls-ca-file -cafile \
+                tls-ca-dir -cadir \
+                tls-cert-file -certfile \
+                tls-key-file -keyfile]
+        foreach {key optionName} $optionMap {
+                if {![dict exists $optionInfo $key]} {
+                        continue
+                }
+                set entry [dict get $optionInfo $key]
+                if {[dict get $entry configured] && [dict get $entry resolved] ne ""} {
+                        lappend customOptions $optionName [dict get $entry resolved]
+                }
+        }
+
+        set allowLegacy [expr {[info exists settings(https-allow-legacy)] ? $settings(https-allow-legacy) : 0}]
+        set tlsDebug [expr {[dict exists $debugOptions tls] ? [dict get $debugOptions tls] : 0}]
+        set tlsDebugRequested $tlsDebug
+        set tlsPrefix "\002RSS TLS Debug\002"
 
 	if {$tlsDebug} {
 		::rss-synd::log_message debug "$tlsPrefix: Initialisiere TLS (allow-legacy=$allowLegacy)"
@@ -677,10 +871,11 @@ proc ::rss-synd::setup_tls {{settingsList {}}} {
 		return 1
 	}
 
-	set baseOptions [list -require 1 -autoservername 1 -ssl2 0 -ssl3 0 -tls1 0 -tls1_1 0 -tls1_2 1]
-	set modernOptions [concat $baseOptions [list -tls1_3 1]]
-	set appliedOptions $modernOptions
-	set optionsNormalized 0
+        set baseCore [list -require 1 -autoservername 1 -ssl2 0 -ssl3 0 -tls1 0 -tls1_1 0 -tls1_2 1]
+        set baseOptions [concat $baseCore $customOptions]
+        set modernOptions [concat $baseOptions [list -tls1_3 1]]
+        set appliedOptions $modernOptions
+        set optionsNormalized 0
 
 	if {$tlsDebug} {
 		::rss-synd::log_message debug "$tlsPrefix: Moderne Parameter: [join $modernOptions { }]"
@@ -715,10 +910,11 @@ proc ::rss-synd::setup_tls {{settingsList {}}} {
 			return 0
 		}
 
-		set legacyOptions [list -require 1 -autoservername 1 -ssl2 0 -ssl3 0 -tls1 1 -tls1_1 1 -tls1_2 1]
-		if {$optionsNormalized} {
-			set legacyOptions [::rss-synd::normalize_tls_options $legacyOptions]
-		}
+                set legacyCore [list -require 1 -autoservername 1 -ssl2 0 -ssl3 0 -tls1 1 -tls1_1 1 -tls1_2 1]
+                set legacyOptions [concat $legacyCore $customOptions]
+                if {$optionsNormalized} {
+                        set legacyOptions [::rss-synd::normalize_tls_options $legacyOptions]
+                }
 		set appliedOptions $legacyOptions
 
 		if {$tlsDebug} {
@@ -796,11 +992,12 @@ proc ::rss-synd::init {args} {
         set packages(uri) [catch {package require uri}]; # URL-Auflösung
 
         if {[info exists settings] && [array exists settings]} {
-	::rss-synd::configure_debug [array get settings]
+        ::rss-synd::configure_debug [array get settings]
         } else {
-	::rss-synd::configure_debug
+        ::rss-synd::configure_debug
         }
         ::rss-synd::configure_logging
+        ::rss-synd::tls_environment_check
 
         foreach feed [array names rss] {
                 array set tmp $default
@@ -893,6 +1090,7 @@ proc ::rss-synd::init {args} {
         bind pubm -|- {* *} [namespace current]::trigger
         bind msgm -|- {*} [namespace current]::trigger
         bind dcc -|- rss [namespace current]::dcc_fetch
+        bind dcc -|- tlscheck [namespace current]::dcc_tls_check
 
         ::rss-synd::log_message info "\002RSS Syndication Script v$version(number)\002 ($version(date)): Loaded."
 }
@@ -903,6 +1101,7 @@ proc ::rss-synd::deinit {args} {
         catch {unbind pubm -|- {* *} [namespace current]::trigger}
         catch {unbind msgm -|- {*} [namespace current]::trigger}
         catch {unbind dcc -|- rss [namespace current]::dcc_fetch}
+        catch {unbind dcc -|- tlscheck [namespace current]::dcc_tls_check}
 
         ::rss-synd::flush_log_queue
 
@@ -910,7 +1109,52 @@ proc ::rss-synd::deinit {args} {
                 catch {[set child]::deinit}
         }
 
-	namespace delete [namespace current]
+        namespace delete [namespace current]
+}
+
+#
+# DCC-Kommandos
+#
+
+proc ::rss-synd::dcc_tls_check {handle idx text} {
+        set status [::rss-synd::tls_environment_check {} 0]
+        set summary [dict get $status summary]
+        putdcc $idx "TLS-Check: $summary"
+
+        set labelMap [dict create \
+                tls-ca-file "CA-Datei" \
+                tls-ca-dir "CA-Verzeichnis" \
+                tls-cert-file "Client-Zertifikat" \
+                tls-key-file "Client-Schlüssel"]
+
+        set paths [dict get $status paths]
+        dict for {key label} $labelMap {
+                if {![dict exists $paths $key]} {
+                        continue
+                }
+                set entry [dict get $paths $key]
+                if {[dict get $entry configured]} {
+                        set resolved [dict get $entry resolved]
+                        set statusLabel [dict get $entry status]
+                        if {$resolved eq ""} {
+                                set message "$label: konfiguriert ($statusLabel)"
+                        } else {
+                                set message "$label: $resolved ($statusLabel)"
+                        }
+                } else {
+                        set message "$label: nicht gesetzt"
+                }
+                putdcc $idx $message
+        }
+
+        set warnings [dict get $status warnings]
+        if {[llength $warnings] == 0} {
+                putdcc $idx "Keine TLS-Warnungen."
+        } else {
+                foreach warn $warnings {
+                        putdcc $idx "Warnung: $warn"
+                }
+        }
 }
 
 #

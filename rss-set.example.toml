@@ -28,6 +28,10 @@ user-agent = [
 ]
 user-agent-rotate = "list"
 https-allow-legacy = 0
+tls-ca-file = ""
+tls-ca-dir = ""
+tls-cert-file = ""
+tls-key-file = ""
 
 [feeds.msbulletins]
 url = "https://technet.microsoft.com/en-us/security/rss/bulletin"
