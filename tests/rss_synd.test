@@ -24,6 +24,10 @@ namespace eval ::testhelpers {
         return {}
     }
 
+    proc noop {args} {
+        return {}
+    }
+
     proc reset_logs {} {
         variable logMessages
         set logMessages {}
@@ -771,16 +775,17 @@ test settings_loading_failure_aborts_execution {Fehlende Einstellungen brechen d
     interp alias rssFail putlog {} ::testhelpers::capture_putlog
     interp alias rssFail utimer {} ::testhelpers::dummy_timer
     interp alias rssFail killutimer {} ::testhelpers::dummy_timer
+    interp alias rssFail bind {} ::testhelpers::noop
+    interp alias rssFail unbind {} ::testhelpers::noop
     set expectedPath [file normalize [file join [file dirname $scriptPath] rss-set.tcl]]
-    set expectedError [format {couldn't read file "%s": no such file or directory} $expectedPath]
 } -body {
     set result [catch {interp eval rssFail [list source $scriptPath]} msg opts]
     set logs [::testhelpers::get_logs]
-    set expectedLog [format "Error: Could not load settings file '%s': %s" $expectedPath $msg]
-    list $result [string equal $msg $expectedError] [llength $logs] [string equal [lindex $logs 0] $expectedLog]
+    set expectedLog [format "\002RSS Warnung\002: Einstellungsdatei '%s' fehlt. Bitte 'rss-set.example.tcl' nach 'rss-set.tcl' kopieren und anpassen." $expectedPath]
+    list $result [string equal $msg ""] [expr {[llength $logs] >= 1}] [string equal [lindex $logs 0] $expectedLog]
 } -cleanup {
     interp delete rssFail
     file delete -force $tmpdir
-} -result {1 1 1 1}
+} -result {0 1 1 1}
 
 cleanupTests
