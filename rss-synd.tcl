@@ -462,9 +462,10 @@ proc ::rss-synd::load_config {} {
         set togglesFile [file normalize [file join $scriptDir rss-set.tcl]]
 
         if {![file exists $togglesFile]} {
-                set err [format {couldn't read file "%s": no such file or directory} $togglesFile]
-                ::rss-synd::log_message error "Error: Could not load settings file '$togglesFile': $err"
-                error $err
+                catch {array unset settings}
+                array set settings {config-format toml config-tcl-file {} config-toml-file {}}
+                ::rss-synd::use_fallback_config "\002RSS Warnung\002: Einstellungsdatei '$togglesFile' fehlt. Bitte 'rss-set.example.tcl' nach 'rss-set.tcl' kopieren und anpassen."
+                return
         }
 
         set preserved {}
@@ -521,14 +522,13 @@ proc ::rss-synd::load_config {} {
                 set tomlFile [file join $scriptDir rss-set.toml]
         }
         set tomlFile [::rss-synd::resolve_path $tomlFile $scriptDir]
-
         if {[catch {package require toml} err]} {
                 ::rss-synd::use_fallback_config "\002RSS Fehler\002: toml-Paket nicht verfügbar ($err), nutze Tcl-Fallback."
                 return
         }
 
         if {![file exists $tomlFile]} {
-                ::rss-synd::use_fallback_config "\002RSS Fehler\002: TOML-Datei '$tomlFile' nicht gefunden, nutze Tcl-Fallback."
+                ::rss-synd::use_fallback_config "\002RSS Fehler\002: TOML-Datei '$tomlFile' nicht gefunden, nutze Tcl-Fallback. Bitte 'rss-set.example.toml' nach 'rss-set.toml' kopieren und anpassen."
                 return
         }
 

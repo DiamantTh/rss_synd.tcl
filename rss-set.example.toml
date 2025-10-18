@@ -1,4 +1,5 @@
 # Beispielkonfiguration für rss-synd.tcl im TOML-Format
+# Kopie als "rss-set.toml" speichern und anschließend anpassen.
 
 [defaults]
 announce-output = 3
