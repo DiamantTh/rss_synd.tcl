@@ -9,7 +9,7 @@
 # Maintainer: DiamantTh <https://github.com/DiamantTh>
 # Link: https://github.com/MICE07/rss_synd.tcl
 # Tags: rss, atom, syndication
-# Updated: 04-Oct-2025
+# Updated: 18-Oct-2025
 #
 # -*- tab-width: 4; indent-tabs-mode: t; -*-
 
@@ -41,14 +41,9 @@ namespace eval ::rss-synd {
         variable debugOptions
         set debugOptions [dict create http 0 tls 0]
 
-        set ctrl2 [format %c 2]
-        set ctrl3 [format %c 3]
-        set fallbackOutputDefault [string cat {[} $ctrl2 {@@channel!title@@@@title@@} $ctrl2 {] @@item!title@@@@entry!title@@@@published@@ - @@item!link@@@@entry!link!=href@@}]
-        set fallbackOutputMs [string cat {[} $ctrl3 {12} $ctrl2 {MS Security bulletins} $ctrl2 $ctrl3 {] } $ctrl3 {10} $ctrl2 {@@item!title@@} $ctrl2 $ctrl3 { - @@item!link@@}]
-
         variable fallbackDefault [list \
-                "announce-output"       3 \
-                "trigger-output"        3 \
+                "announce-output"       0 \
+                "trigger-output"        0 \
                 "remove-empty"          1 \
                 "trigger-type"          0:2 \
                 "announce-type"         0 \
@@ -59,9 +54,9 @@ namespace eval ::rss-synd {
                 "log-mode"              immediate \
                 "log-interval"          5 \
                 "timeout"               60000 \
-                "channels"              "#channel" \
-                "trigger"               "!rss @@feedid@@" \
-                "output"                $fallbackOutputDefault \
+                "channels"              {} \
+                "trigger"               "" \
+                "output"                "" \
                 "user-agent"            [list \
                         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36" \
                         "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36" \
@@ -77,19 +72,17 @@ namespace eval ::rss-synd {
 
         variable fallbackFeeds [dict create \
                 msbulletins [list \
-                        "url"                   "http://technet.microsoft.com/en-us/security/rss/bulletin" \
-                        "channels"              "#channel" \
+                        "url"                   "https://technet.microsoft.com/en-us/security/rss/bulletin" \
+                        "channels"              {} \
                         "database"              "/path to dir/msbulletins.db" \
-                        "output"                $fallbackOutputMs \
-                        "trigger"               "!msbulletins" \
-                        "announce-output"       5 \
-                        "trigger-output"        5 \
+                        "output"                "" \
+                        "trigger"               "" \
+                        "announce-output"       0 \
+                        "trigger-output"        0 \
                         "update-interval"       10 \
                         "output-order"          0 \
                 ] \
         ]
-
-        unset fallbackOutputDefault fallbackOutputMs ctrl2 ctrl3
 }
 
 proc ::rss-synd::log_preview {text} {
@@ -772,7 +765,7 @@ proc ::rss-synd::init {args} {
 	variable settings
 
 	set version(number)	git-pubdate
-	set version(date)	"2025-10-17"
+	set version(date)	"2025-10-18"
 
         package require http
         set packages(base64) [catch {package require base64}]; # http auth

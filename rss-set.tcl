@@ -69,7 +69,7 @@ namespace eval ::rss-synd {
 	}
 	array set rss {}
 	set rss(msbulletins) [list \
-		"url"			"http://technet.microsoft.com/en-us/security/rss/bulletin" \
+		"url"			"https://technet.microsoft.com/en-us/security/rss/bulletin" \
 		"channels"		"#channel" \
 		"database"		"/path to dir/msbulletins.db" \
 		"output"		$msBulletinsOutput \

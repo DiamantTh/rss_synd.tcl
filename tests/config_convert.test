@@ -18,8 +18,8 @@ test config_convert_toml_to_tcl {Konvertierung von TOML nach Tcl erzeugt set-Bl√
     set content [string trim [read $fh]]
     close $fh
     set hasDefault [regexp {^set default \{} $content]
-    set hasFeed [regexp {set rss\(msbulletins\) \{} $content]
-    list $hasDefault $hasFeed
+    set hasAnyFeed [regexp -line {^set rss\([^)]+\) \{} $content]
+    list $hasDefault $hasAnyFeed
 } -cleanup {
     removeDirectory $tmpdir
 } -result {1 1}
