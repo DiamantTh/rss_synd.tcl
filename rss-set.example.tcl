@@ -1,8 +1,9 @@
 #
 # Konfigurationsschalter für rss-synd.tcl
+# Kopiere diese Datei als "rss-set.tcl" und passe die Werte an.
 #
 # Variante "toml":
-#   - Standardmodus, liest Einstellungen aus "rss-set.toml".
+#   - Standardmodus, liest Einstellungen aus "rss-set.toml" (Kopie von "rss-set.example.toml").
 #   - Erfordert das Tcllib-Paket "toml".
 # Variante "tcl":
 #   - Lädt klassische Tcl-Listen aus der in "config-tcl-file" angegebenen Datei.
