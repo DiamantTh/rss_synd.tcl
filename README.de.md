@@ -65,7 +65,7 @@ namespace eval ::rss-synd {
   channels = "#news #alerts"
   ```
 
-- **Tcl**: Setze `config-format` auf `tcl` und gib optional `config-tcl-file` an. Ohne Pfad verwendet das Skript die eingebauten Fallback-Listen (identisch zur bisherigen Beispielkonfiguration).
+- **Tcl**: Setze `config-format` auf `tcl` und gib optional `config-tcl-file` an. Ohne Pfad verwendet das Skript die eingebauten Fallback-Listen (identisch zur bisherigen Beispielkonfiguration). Beachte, dass diese Fallbacks `trigger-output` auf `0` setzen und Trigger damit absichtlich stumm bleiben, bis du eigene Werte definierst.
 
 Die folgenden Optionen kannst du global in der Default-Konfiguration oder pro Feed festlegen. Spezifische Feed-Werte überschreiben globale Einstellungen.
 
@@ -83,6 +83,7 @@ Die folgenden Optionen kannst du global in der Default-Konfiguration oder pro Fe
 | `announce-output` | Anzahl Artikel pro Ankündigung (`0` deaktiviert). | `3` | `5` |
 | `trigger-type` | Ausgabeformat für Trigger `<channel>:<privmsg>` (`0/1` für Channel, `2/3` für User). | `0:2` | `1:3` |
 | `trigger-output` | Anzahl Artikel pro Trigger (`0` deaktiviert). | `3` | `1` |
+| `trigger-fetch` | Optionale HTTP-Aktualisierung bei Triggern (`0` = aus, `due` = nur bei fälligem Intervall, `force` = immer abrufen). | `0` | `force` |
 | `update-interval` | Abrufintervall in Minuten. | `30` | `60` |
 
 > **Hinweis:** Das Standard-Template nutzt den Sammelplatzhalter `@@published@@`. Er prüft nacheinander `pubDate`, `published`, `updated` und `dc:date` und fügt nur bei vorhandenen Werten einen Gedankenstrich samt Datum an.
@@ -195,6 +196,14 @@ namespace eval ::rss-synd {
     }
 }
 ```
+
+### Manuelle Aktualisierung & DCC-Trigger
+
+Für Abrufe auf Zuruf gibt es zwei Wege:
+
+1. Weise einem Feed `trigger-fetch` zu – wahlweise `due` (nur wenn das Intervall abgelaufen ist) oder `force` (immer einen neuen HTTP-Abruf starten). Der Trigger aktualisiert dann zuerst die Datenbank und liefert anschließend die Einträge.
+2. Nutze im DCC-Chat den Befehl `.rss <feed> [force]`. Ohne Zusatz gilt das normale Intervall, mit `force` wird die Prüfung übersprungen und der Download sofort gestartet.
+3. Prüfe mit `.tlscheck`, ob das TLS-Paket gefunden wurde und welche CA-Pfade (`-cafile`/`-cadir`) aktuell aktiv sind – so erkennst du Zertifikatsprobleme direkt im DCC-Chat.
 
 ### Logging & DCC beruhigen
 

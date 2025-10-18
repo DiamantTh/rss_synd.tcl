@@ -66,7 +66,7 @@ namespace eval ::rss-synd {
   channels = "#news #alerts"
   ```
 
-- **Tcl**: Set `config-format` to `tcl` and optionally specify `config-tcl-file`. Without a custom path the script falls back to the built-in lists (matching the legacy sample configuration).
+- **Tcl**: Set `config-format` to `tcl` and optionally specify `config-tcl-file`. Without a custom path the script falls back to the built-in lists (matching the legacy sample configuration). Remember that these fallbacks set `trigger-output` to `0`, keeping triggers silent until you provide your own values.
 
 The following options can be defined globally in the default configuration or per feed. Feed-specific values override global settings.
 
@@ -84,6 +84,7 @@ The following options can be defined globally in the default configuration or pe
 | `announce-output` | Number of items per announcement (`0` disables announcements). | `3` | `5` |
 | `trigger-type` | Output mode for triggers `<channel>:<privmsg>` (`0/1` for channel, `2/3` for user). | `0:2` | `1:3` |
 | `trigger-output` | Number of items per trigger (`0` disables triggers). | `3` | `1` |
+| `trigger-fetch` | Optional HTTP refresh whenever a trigger runs (`0` = off, `due` = only if interval expired, `force` = always fetch). | `0` | `force` |
 | `update-interval` | Polling interval in minutes. | `30` | `60` |
 
 > **Note:** The default template uses the combined `@@published@@` placeholder. It checks `pubDate`, `published`, `updated`, then `dc:date` and only adds an en dash plus date when one of them is present.
@@ -196,6 +197,14 @@ namespace eval ::rss-synd {
     }
 }
 ```
+
+### Manual refresh & DCC triggers
+
+If you want on-demand updates there are two options:
+
+1. Set `trigger-fetch` in a feed to `due` (only fetch when the interval has elapsed) or `force` (always issue a new HTTP request) so that public or private triggers refresh the database before printing items.
+2. Use the DCC party line command `.rss <feed> [force]` to request a refresh manually. Without the optional `force` argument the script honours the normal interval; supplying `force` bypasses the age check and starts an immediate download.
+3. Run `.tlscheck` on the party line to verify that the TLS package is available and which CA paths (`-cafile`/`-cadir`) are active so you can diagnose certificate issues directly from DCC.
 
 ### Logging & keeping DCC quiet
 

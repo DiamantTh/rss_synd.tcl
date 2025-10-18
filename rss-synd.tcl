@@ -44,6 +44,7 @@ namespace eval ::rss-synd {
         variable fallbackDefault [list \
                 "announce-output"       0 \
                 "trigger-output"        0 \
+                "trigger-fetch"         0 \
                 "remove-empty"          1 \
                 "trigger-type"          0:2 \
                 "announce-type"         0 \
@@ -468,9 +469,8 @@ proc ::rss-synd::load_config {} {
                         set togglesFile $togglesExample
                         set usingExampleToggles 1
                 } else {
-                        set err [format {couldn't read file "%s": no such file or directory} $togglesFile]
-                        ::rss-synd::log_message error "Error: Could not load settings file '$togglesFile': $err"
-                        error $err
+                        ::rss-synd::use_fallback_config [format "\002RSS Warnung\002: Einstellungsdatei '%s' fehlt. Bitte 'rss-set.example.tcl' nach 'rss-set.tcl' kopieren und anpassen." $togglesFile]
+                        return
                 }
         }
 
@@ -645,19 +645,108 @@ proc ::rss-synd::tls_socket {args} {
 }
 
 proc ::rss-synd::normalize_tls_options {options} {
-	set normalized {}
-	foreach {key value} $options {
-		if {[string match "-tls1_*" $key]} {
-			set key [string map {"-tls1_" "-tls1."} $key]
-		}
-		lappend normalized $key $value
-	}
-	return $normalized
+        set normalized {}
+        foreach {key value} $options {
+                if {[string match "-tls1_*" $key]} {
+                        set key [string map {"-tls1_" "-tls1."} $key]
+                }
+                lappend normalized $key $value
+        }
+        return $normalized
+}
+
+proc ::rss-synd::tls_promote_status {current new} {
+        set hierarchy {error warn ok}
+        set currentIdx [lsearch -exact $hierarchy $current]
+        set newIdx [lsearch -exact $hierarchy $new]
+        if {$currentIdx < 0} {
+                set currentIdx [expr {[llength $hierarchy] - 1}]
+        }
+        if {$newIdx < 0} {
+                return [lindex $hierarchy $currentIdx]
+        }
+        if {$newIdx < $currentIdx} {
+                return [lindex $hierarchy $newIdx]
+        }
+        return [lindex $hierarchy $currentIdx]
+}
+
+proc ::rss-synd::tls_environment_check {{source startup}} {
+        set status ok
+        set entries {}
+
+        if {[catch {package present tls} tlsVersion]} {
+                set status error
+                lappend entries [dict create level error text "TLS-Paket nicht verfügbar: $tlsVersion"]
+                return [dict create status $status entries $entries]
+        }
+
+        if {$tlsVersion eq ""} {
+                set tlsVersion "unbekannt"
+        }
+
+        lappend entries [dict create level info text "TLS-Paket geladen (Version: $tlsVersion)"]
+
+        if {[info commands ::tls::defaults] eq ""} {
+                set status [::rss-synd::tls_promote_status $status warn]
+                lappend entries [dict create level warning text "::tls::defaults ist nicht verfügbar, Zertifikats-Pfade können nicht geprüft werden"]
+                return [dict create status $status entries $entries]
+        }
+
+        if {[catch {set defaultsList [::tls::defaults]} defaultsErr]} {
+                set status [::rss-synd::tls_promote_status $status warn]
+                lappend entries [dict create level warning text "TLS-Standardoptionen konnten nicht gelesen werden: $defaultsErr"]
+                return [dict create status $status entries $entries]
+        }
+
+        array set defaultsArr {}
+        if {[llength $defaultsList] > 0} {
+                catch {array set defaultsArr $defaultsList}
+        }
+
+        set cafile ""
+        if {[info exists defaultsArr(-cafile)]} {
+                set cafile $defaultsArr(-cafile)
+        }
+
+        set cadir ""
+        if {[info exists defaultsArr(-cadir)]} {
+                set cadir $defaultsArr(-cadir)
+        }
+
+        set havePath 0
+
+        if {$cafile ne ""} {
+                if {[file exists $cafile]} {
+                        set havePath 1
+                        lappend entries [dict create level info text "CA-Bundle-Datei genutzt: $cafile"]
+                } else {
+                        set status [::rss-synd::tls_promote_status $status warn]
+                        lappend entries [dict create level warning text "Konfigurierte CA-Datei existiert nicht: $cafile"]
+                }
+        }
+
+        if {$cadir ne ""} {
+                if {[file isdirectory $cadir]} {
+                        set havePath 1
+                        lappend entries [dict create level info text "CA-Verzeichnis genutzt: $cadir"]
+                } else {
+                        set status [::rss-synd::tls_promote_status $status warn]
+                        lappend entries [dict create level warning text "Konfiguriertes CA-Verzeichnis existiert nicht: $cadir"]
+                }
+        }
+
+        if {!$havePath} {
+                set status [::rss-synd::tls_promote_status $status warn]
+                lappend entries [dict create level warning text "Weder CA-Datei noch CA-Verzeichnis sind gesetzt – TLS-Zertifikate können nicht geprüft werden"]
+        }
+
+        return [dict create status $status entries $entries]
 }
 
 proc ::rss-synd::setup_tls {{settingsList {}}} {
-	variable tls
-	variable debugOptions
+        variable tls
+        variable debugOptions
 
 	array set settings $settingsList
 
@@ -888,19 +977,33 @@ proc ::rss-synd::init {args} {
 		unset tmp
 	}
 
-	bind evnt -|- prerehash [namespace current]::deinit
-	bind time -|- {* * * * *} [namespace current]::feed_get
-	bind pubm -|- {* *} [namespace current]::trigger
-	bind msgm -|- {*} [namespace current]::trigger
+        bind evnt -|- prerehash [namespace current]::deinit
+        bind time -|- {* * * * *} [namespace current]::feed_get
+        bind pubm -|- {* *} [namespace current]::trigger
+        bind msgm -|- {*} [namespace current]::trigger
+        bind dcc -|- rss [namespace current]::dcc_fetch
+        bind dcc -|- tlscheck [namespace current]::dcc_tls_check
+
+        set tlsReport [[namespace current]::tls_environment_check startup]
+        if {[dict exists $tlsReport entries]} {
+                set tlsPrefix "\\002RSS TLS Check\\002"
+                foreach entry [dict get $tlsReport entries] {
+                        set level [dict get $entry level]
+                        set text [dict get $entry text]
+                        ::rss-synd::log_message $level "$tlsPrefix: $text"
+                }
+        }
 
         ::rss-synd::log_message info "\002RSS Syndication Script v$version(number)\002 ($version(date)): Loaded."
 }
 
 proc ::rss-synd::deinit {args} {
-	catch {unbind evnt -|- prerehash [namespace current]::deinit}
-	catch {unbind time -|- {* * * * *} [namespace current]::feed_get}
-	catch {unbind pubm -|- {* *} [namespace current]::trigger}
-	catch {unbind msgm -|- {*} [namespace current]::trigger}
+        catch {unbind evnt -|- prerehash [namespace current]::deinit}
+        catch {unbind time -|- {* * * * *} [namespace current]::feed_get}
+        catch {unbind pubm -|- {* *} [namespace current]::trigger}
+        catch {unbind msgm -|- {*} [namespace current]::trigger}
+        catch {unbind dcc -|- rss [namespace current]::dcc_fetch}
+        catch {unbind dcc -|- tlscheck [namespace current]::dcc_tls_check}
 
         ::rss-synd::flush_log_queue
 
@@ -916,8 +1019,8 @@ proc ::rss-synd::deinit {args} {
 ##
 
 proc ::rss-synd::trigger {nick user handle args} {
-	variable rss
-	variable default
+        variable rss
+        variable default
 
 	set i 0
 	set chan ""
@@ -960,10 +1063,33 @@ proc ::rss-synd::trigger {nick user handle args} {
 				set feed(channels) ""
 			}
 
-			if {[catch {set data [[namespace current]::feed_read]} error] == 0} {
+                        set fetchMode none
+                        if {[info exists feed(trigger-fetch)]} {
+                                set fetchMode [string tolower $feed(trigger-fetch)]
+                        }
+
+                        switch -glob -- $fetchMode {
+                                {force} - {1} - {true} - {yes} {
+                                        set fetchResult [[namespace current]::start_feed_fetch $name force trigger]
+                                }
+                                {due} - {interval} - {2} {
+                                        set fetchResult [[namespace current]::start_feed_fetch $name due trigger]
+                                }
+                                default {
+                                        set fetchResult [dict create status skipped reason disabled]
+                                }
+                        }
+
+                        if {[dict get $fetchResult status] eq "error"} {
+                                ::rss-synd::log_message error "\002RSS HTTP Fehler\002: Trigger-Abruf für \"$name\" scheiterte: [dict get $fetchResult message]"
+                        } elseif {[dict get $fetchResult status] eq "skipped" && [dict exists $fetchResult message]} {
+                                ::rss-synd::log_message debug "RSS Debug Trigger: Abruf für '$name' übersprungen – [dict get $fetchResult message]"
+                        }
+
+                        if {[catch {set data [[namespace current]::feed_read]} error] == 0} {
                                 if {![[namespace current]::feed_info $data]} {
                                         ::rss-synd::log_message error "\002RSS Error\002: Invalid feed database file format ($feed(database))!"
-					return
+                                        return
 				}
 
 				if {$feed(trigger-output) > 0} {
@@ -1009,12 +1135,9 @@ proc ::rss-synd::trigger {nick user handle args} {
 		}
 
 		[namespace current]::feed_msg $list_type $list_msgs list_targets $nick
-	}
+        }
 }
 
-#
-# Feed Retrieving Functions
-##
 
 proc ::rss-synd::next_user_agent {name feedVar} {
         upvar 1 $feedVar feed
@@ -1109,72 +1232,187 @@ proc ::rss-synd::next_user_agent {name feedVar} {
         return $chosen
 }
 
+proc ::rss-synd::start_feed_fetch {name {mode due} {origin auto}} {
+	variable rss
+	variable debugOptions
+
+	if {![info exists rss($name)]} {
+		return [dict create status error message "Feed \"$name\" nicht gefunden"]
+	}
+
+	array set feed $rss($name)
+
+	set normalized [string tolower $mode]
+	set forceFetch [expr {$normalized in {force immediate 1 true yes}}]
+
+	set now [unixtime]
+	set intervalSeconds [expr {$feed(update-interval) * 60}]
+	set due [expr {$feed(updated) <= ($now - $intervalSeconds)}]
+
+        if {!$forceFetch && !$due} {
+                return [dict create status skipped reason interval message "Abrufintervall für \"$name\" noch nicht abgelaufen"]
+        }
+
+	set userAgent [next_user_agent $name feed]
+	::http::config -useragent $userAgent
+
+	set feed(type) $feed(announce-type)
+	set feed(headers) [list]
+
+	if {$feed(url-auth) ne ""} {
+		lappend feed(headers) Authorization "Basic $feed(url-auth)"
+	}
+
+	if {[info exists feed(enable-gzip)] && $feed(enable-gzip)} {
+		lappend feed(headers) "Accept-Encoding" "gzip"
+	}
+
+	set callbackData [concat [array get feed] [list feed-name $name depth 0 fetch-origin $origin]]
+
+	set headerSummary "keine"
+	if {[llength $feed(headers)] > 0} {
+		set headerPairs {}
+		foreach {hKey hValue} $feed(headers) {
+			lappend headerPairs "$hKey: $hValue"
+		}
+                set headerSummary [join $headerPairs ", "]
+	}
+
+        if {[dict exists $debugOptions http] && [dict get $debugOptions http]} {
+                ::rss-synd::log_message debug [format "\002RSS Debug HTTP\002: Feed '%s' -> GET %s (User-Agent: %s; Header: %s; Origin: %s)" $name $feed(url) $userAgent $headerSummary $origin]
+        }
+
+	set result [catch {::http::geturl $feed(url) -command [list [namespace current]::feed_callback $callbackData] -timeout $feed(timeout) -headers $feed(headers)} token]
+
+	if {$result != 0} {
+		return [dict create status error message $token]
+	}
+
+	if {[dict exists $debugOptions http] && [dict get $debugOptions http]} {
+		set headerText [::rss-synd::format_header_debug $feed(headers)]
+                ::rss-synd::log_message info [format "\002RSS Debug\002: HTTP-Abruf für '%s' (Timeout: %s ms, Header: %s)" $feed(url) $feed(timeout) $headerText]
+	}
+
+	set feed(updated) $now
+	set rss($name) [array get feed]
+
+	return [dict create status started]
+}
+
+
 proc ::rss-synd::feed_get {args} {
-        variable rss
-        variable debugOptions
+	variable rss
 
-        set i 0
-        foreach name [array names rss] {
-                if {$i == 3} { break }
+	set i 0
+	foreach name [array names rss] {
+		if {$i == 3} { break }
 
-                array set feed $rss($name)
+		set fetchInfo [[namespace current]::start_feed_fetch $name due auto]
 
-                if {$feed(updated) <= [expr { [unixtime] - ($feed(update-interval) * 60) }]} {
-                        set userAgent [next_user_agent $name feed]
-                        ::http::config -useragent $userAgent
-
-                        set feed(type) $feed(announce-type)
-                        set feed(headers) [list]
-
-                        if {$feed(url-auth) != ""} {
-                                lappend feed(headers) "Authorization" "Basic $feed(url-auth)"
-                        }
-
-                        if {([info exists feed(enable-gzip)]) && ($feed(enable-gzip) == 1)} {
-                                lappend feed(headers) "Accept-Encoding" "gzip"
-                        }
-
-                        set callbackData [concat [array get feed] [list feed-name $name depth 0]]
-
-                        set headerSummary "keine"
-                        if {[llength $feed(headers)] > 0} {
-                                set headerPairs {}
-                                foreach {hKey hValue} $feed(headers) {
-                                        lappend headerPairs "$hKey: $hValue"
-                                }
-                                set headerSummary [join $headerPairs ", "]
-                        }
-
-                        if {[dict exists $debugOptions http] && [dict get $debugOptions http]} {
-                                ::rss-synd::log_message debug [format "RSS Debug HTTP: Feed '%s' -> GET %s (User-Agent: %s; Header: %s)" $name $feed(url) $userAgent $headerSummary]
-                        }
-
-                        set getResult [catch {::http::geturl "$feed(url)" -command [list [namespace current]::feed_callback $callbackData] -timeout $feed(timeout) -headers $feed(headers)} token]
-
-                        if {$getResult != 0} {
-                                ::rss-synd::log_message error "RSS HTTP Fehler: Anfrage für "$feed(url)" konnte nicht gestartet werden: $token"
-                                continue
-                        }
-                        if {[dict exists $debugOptions http] && [dict get $debugOptions http]} {
-                                set headerText [::rss-synd::format_header_debug $feed(headers)]
-                                ::rss-synd::log_message info [format "\002RSS Debug\002: HTTP-Abruf für '%s' (Timeout: %s ms, Header: %s)" $feed(url) $feed(timeout) $headerText]
-                        }
-
-                        set getResult [catch {::http::geturl "$feed(url)" -command "[namespace current]::feed_callback {[array get feed] depth 0}" -timeout $feed(timeout) -headers $feed(headers)} token]
-
-                        if {$getResult != 0} {
-                                ::rss-synd::log_message error "\002RSS HTTP Fehler\002: Anfrage für \"$feed(url)\" konnte nicht gestartet werden: $token"
-                                continue
+		switch -- [dict get $fetchInfo status] {
+			started {
+				incr i
 			}
+			error {
+				::rss-synd::log_message error "RSS HTTP Fehler: Anfrage für \"$name\" konnte nicht gestartet werden: [dict get $fetchInfo message]"
+			}
+		}
+	}
+}
 
-                        set feed(updated) [unixtime]
-                        set rss($name) [array get feed]
-                        incr i
+
+proc ::rss-synd::dcc_fetch {handle idx text} {
+        variable rss
+
+        set trimmed [string trim $text]
+        if {$trimmed eq ""} {
+		putdcc $idx "Verwendung: rss <Feedname> [force]"
+		return
+	}
+
+	set parts [split $trimmed]
+	set feedArg [lindex $parts 0]
+	set modeArg [string tolower [lindex $parts 1]]
+
+	set target ""
+	foreach name [array names rss] {
+		if {[string equal -nocase $name $feedArg]} {
+			set target $name
+			break
+		}
+	}
+
+	if {$target eq ""} {
+		putdcc $idx "Unbekannter Feed: $feedArg"
+		return
+	}
+
+	set mode due
+	if {$modeArg in {force sofort now sofort! true yes 1}} {
+		set mode force
+	}
+
+	set fetchInfo [[namespace current]::start_feed_fetch $target $mode dcc]
+	set status [dict get $fetchInfo status]
+
+	switch -- $status {
+		started {
+			putdcc $idx "HTTP-Abruf für '$target' gestartet."
+			::rss-synd::log_message info "\002RSS\002: DCC-Trigger von $handle für '$target' gestartet (Modus: $mode)."
+		}
+                skipped {
+                        set reason "keine Aktion"
+                        if {[dict exists $fetchInfo message]} {
+                                set reason [dict get $fetchInfo message]
+                        } elseif {[dict exists $fetchInfo reason]} {
+                                set reason [dict get $fetchInfo reason]
+                        }
+                        if {[string equal -nocase $reason "disabled"]} {
+                                set reason "Trigger-Fetch deaktiviert"
+                        }
+                        putdcc $idx "Abruf für '$target' übersprungen: $reason."
+                        ::rss-synd::log_message info "\002RSS\002: DCC-Trigger von $handle für '$target' übersprungen ($reason)."
                 }
-
-                unset feed
+		error {
+			set err [dict get $fetchInfo message]
+			putdcc $idx "Abruf für '$target' fehlgeschlagen: $err"
+			::rss-synd::log_message error "\002RSS HTTP Fehler\002: DCC-Abruf für '$target' scheiterte: $err"
+                }
         }
 }
+
+proc ::rss-synd::dcc_tls_check {handle idx text} {
+        set report [[namespace current]::tls_environment_check dcc]
+        set status [dict get $report status]
+
+        switch -- $status {
+                error { set statusText "Fehler" }
+                warn { set statusText "Warnungen" }
+                default { set statusText "OK" }
+        }
+
+        set prefix "RSS TLS Check"
+
+        putdcc $idx "$prefix: Gesamtstatus $statusText"
+
+        if {[dict exists $report entries]} {
+                foreach entry [dict get $report entries] {
+                        set text [dict get $entry text]
+                        putdcc $idx " - $text"
+                }
+        }
+
+        switch -- $status {
+                error { set logLevel error }
+                warn { set logLevel warning }
+                default { set logLevel info }
+        }
+
+        ::rss-synd::log_message $logLevel "\002RSS TLS Check\002: DCC-Aufruf von $handle abgeschlossen (Status: $statusText)."
+}
+
+
+
 
 
 proc ::rss-synd::feed_callback {feedlist args} {
@@ -1227,18 +1465,16 @@ proc ::rss-synd::feed_callback {feedlist args} {
                                         if {$debugRedirect} {
                                                 ::rss-synd::log_message debug [format "RSS Debug Redirect: Feed '%s' folgt %s -> %s" $feedName $state(url) $redirectUrl]
                                         }
-                                        set redirectOptions [list -command [list [namespace current]::feed_callback [array get feed]] -timeout $feed(timeout) -headers $feed(headers)]
-                                        namespace eval ::http { variable url args }
-                                        set ::http::url $redirectUrl
-                                        set ::http::args $redirectOptions
-                                        set redirectResult [catch {::http::geturl "$redirectUrl" {*}$redirectOptions} redirectToken]
-                                        if {[dict exists $debugOptions http] && [dict get $debugOptions http]} {
+                                        set callbackList [array get feed]
+                                        set redirectOptions [list -command [list [namespace current]::feed_callback $callbackList] -timeout $feed(timeout) -headers $feed(headers)]
+                                        namespace eval ::http { variable lastRedirectArgs }
+                                        set ::http::lastRedirectArgs [list $redirectUrl $redirectOptions]
+                                        set redirectResult [catch {::http::geturl $redirectUrl {*}$redirectOptions} redirectToken]
+                                        if {$redirectResult != 0} {
+                                                ::rss-synd::log_message error "\002RSS HTTP Fehler\002: Weiterleitungsabruf von \"$redirectUrl\" scheiterte: $redirectToken"
+                                        } elseif {[dict exists $debugOptions http] && [dict get $debugOptions http]} {
                                                 set headerText [::rss-synd::format_header_debug $feed(headers)]
                                                 ::rss-synd::log_message info [format "\002RSS Debug\002: HTTP-Redirect-Abruf für '%s' (Timeout: %s ms, Header: %s)" $redirectUrl $feed(timeout) $headerText]
-                                        }
-                                        set redirectResult [catch {::http::geturl "$redirectUrl" -command "[namespace current]::feed_callback {[array get feed]}" -timeout $feed(timeout) -headers $feed(headers)} redirectToken]
-                                        if {$redirectResult != 0} {
-                                                ::rss-synd::log_message error "RSS HTTP Fehler: Weiterleitungsabruf von "$redirectUrl" scheiterte: $redirectToken"
                                         }
                                 }
                         }
