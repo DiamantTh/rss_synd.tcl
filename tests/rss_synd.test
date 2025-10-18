@@ -35,7 +35,7 @@ namespace eval ::testhelpers {
 
 set here [file dirname [info script]]
 namespace eval ::rss-synd {}
-source [file join $here .. rss_synd.tcl]
+source [file join $here .. rss-sync.tcl]
 
 namespace eval ::http {
     variable lastUserAgents {}
@@ -704,8 +704,8 @@ test settings_loading_failure_aborts_execution {Fehlende Einstellungen brechen d
     set tmpdir [file normalize [file join $here tmp-missing-settings]]
     file delete -force $tmpdir
     file mkdir $tmpdir
-    set scriptPath [file normalize [file join $tmpdir rss_synd.tcl]]
-    file copy -force [file join $here .. rss_synd.tcl] $scriptPath
+    set scriptPath [file normalize [file join $tmpdir rss-sync.tcl]]
+    file copy -force [file join $here .. rss-sync.tcl] $scriptPath
     namespace eval ::testhelpers { reset_logs }
     interp create rssFail
     interp alias rssFail putlog {} ::testhelpers::capture_putlog

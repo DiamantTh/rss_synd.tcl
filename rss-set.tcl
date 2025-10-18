@@ -1,12 +1,12 @@
 #
-# Konfigurationsschalter für rss_synd.tcl
+# Konfigurationsschalter für rss-sync.tcl
 #
 # Variante "toml":
 #   - Standardmodus, liest Einstellungen aus "rss-set.toml".
 #   - Erfordert das Tcllib-Paket "toml".
 # Variante "tcl":
 #   - Lädt klassische Tcl-Listen aus der in "config-tcl-file" angegebenen Datei.
-#   - Ohne Angabe wird der eingebaute Fallback aus rss_synd.tcl genutzt.
+#   - Ohne Angabe wird der eingebaute Fallback aus rss-sync.tcl genutzt.
 #
 
 namespace eval ::rss-synd {
