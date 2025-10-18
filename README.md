@@ -3,7 +3,7 @@
 > **German version:** See [README.de.md](README.de.md).
 
 ## Introduction
-The `rss_synd.tcl` script extends Eggdrop bots with the ability to automatically read RSS and Atom feeds, detect new entries, and announce them in IRC channels. It supports secure connections, customizable output, and flexible trigger mechanisms.
+The `rss-synd.tcl` script extends Eggdrop bots with the ability to automatically read RSS and Atom feeds, detect new entries, and announce them in IRC channels. It supports secure connections, customizable output, and flexible trigger mechanisms.
 
 ## Open tasks
 - **Harden feed validation:** Ensure that only valid RSS or Atom feeds are accepted during retrieval and log unexpected formats with clear diagnostics.
@@ -16,7 +16,7 @@ The `rss_synd.tcl` script extends Eggdrop bots with the ability to automatically
 - Optional post-processing of outputs via Tcl expressions.
 
 ## Installation
-1. Copy `rss_synd.tcl`, `rss-set.tcl`, and (when using TOML) `rss-set.toml` into your Eggdrop bot's script directory.
+1. Copy `rss-synd.tcl`, `rss-set.tcl`, and (when using TOML) `rss-set.toml` into your Eggdrop bot's script directory.
 2. Add the line `source scripts/rss-synd.tcl` to your `eggdrop.conf` (adjust the path as needed).
 
 ### Package installation (optional features)
@@ -207,5 +207,5 @@ While buffered mode is active, individual log entries are grouped and only a com
 
 ## Compatibility & versions
 
-- Requires an Eggdrop with Tcl support and the standard `http` package; optional features rely on `base64`, `tls`, and `Trf` (`package require …` in `rss_synd.tcl`).
+- Requires an Eggdrop with Tcl support and the standard `http` package; optional features rely on `base64`, `tls`, and `Trf` (`package require …` in `rss-synd.tcl`).
 - For HTTPS connections the script enables TLS 1.2/1.3 by default and registers its own TLS sockets; you can enable older protocols via `https-allow-legacy` if needed.

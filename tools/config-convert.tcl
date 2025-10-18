@@ -1,4 +1,4 @@
-# config-convert.tcl -- Hilfsskript zur Konvertierung der rss_synd.tcl-Konfiguration
+# config-convert.tcl -- Hilfsskript zur Konvertierung der rss-synd.tcl-Konfiguration
 #
 # Aufruf:
 #   tclsh tools/config-convert.tcl --from <toml|tcl> --to <toml|tcl> --input <Datei> --output <Datei|->
@@ -134,9 +134,9 @@ namespace eval ::config_convert {
         proc load_configuration {format inputPath} {
                 variable projectRoot
 
-                set scriptPath [file join $projectRoot rss_synd.tcl]
+                set scriptPath [file join $projectRoot rss-synd.tcl]
                 if {![file exists $scriptPath]} {
-                        error "rss_synd.tcl nicht gefunden unter '$scriptPath'"
+                        error "rss-synd.tcl nicht gefunden unter '$scriptPath'"
                 }
 
                 ensure_runtime_stubs

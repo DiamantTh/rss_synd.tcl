@@ -1,4 +1,4 @@
-# Beispielkonfiguration für rss_synd.tcl im TOML-Format
+# Beispielkonfiguration für rss-synd.tcl im TOML-Format
 
 [defaults]
 announce-output = 3
