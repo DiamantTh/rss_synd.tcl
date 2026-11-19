@@ -1,0 +1,26 @@
+# Alternative Beispielkonfiguration. In rss-set.tcl config-format auf toml setzen.
+# URL, Channel und Datenbankpfad bitte anpassen.
+[defaults]
+announce-output = 3
+trigger-output = 3
+remove-empty = 1
+trigger-type = "0:2"
+announce-type = 0
+max-depth = 5
+evaluate-tcl = 0
+update-interval = 30
+output-order = 0
+log-mode = "immediate"
+log-interval = 5
+timeout = 60000
+channels = "#example"
+trigger = "!rss @@feedid@@"
+output = "@@item!title@@@@entry!title@@ - @@item!link@@@@entry!link!=href@@"
+user-agent = ["rss-synd/1.0"]
+https-allow-legacy = 0
+
+[feeds.example]
+url = "https://example.com/feed.xml"
+channels = "#example"
+database = "./scripts/feeds/example.db"
+trigger = "!example"
