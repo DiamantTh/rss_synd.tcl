@@ -75,6 +75,10 @@ Eggdrop schreibt Skriptmeldungen in die Party-Line (DCC-Chat). Wer den Chat ruhi
 2. Mit `log-interval` festlegen, wie viele Minuten zwischen zwei Sammelmeldungen liegen sollen (die Zusammenfassung enthält Anzahl pro Level sowie erste/letzte Meldung).
 Im Pufferbetrieb werden einzelne Meldungen nicht mehr sofort angezeigt, sondern als kompakte Übersicht nach Ablauf des Intervalls ausgegeben. Mit `immediate` lässt sich das alte Verhalten jederzeit wiederherstellen.
 ## Kompatibilität & Versionen
-- Benötigt einen Eggdrop mit Tcl-Unterstützung und dem Standardpaket `http`; optionale Features setzen `base64`, `tls` und `Trf` voraus (`package require …` in `rss-synd.tcl`).
+- Benötigt Eggdrop mit Tcl 8.6 und den Standardpaketen `http` und `zlib`; optionale Funktionen setzen `base64`, `tls` und `tomltcl` voraus.
 - HTTPS-Zertifikate werden standardmäßig geprüft. Das Skript aktiviert TLS 1.2/1.3 und registriert eigene TLS-Sockets.
 - `https-allow-legacy` erlaubt ältere TLS-Protokolle als Fallback und ist unsicher; aktiviere es nur, wenn der Server es erfordert.
+
+### Feed-Cache
+
+Jeder `database`-Pfad bezeichnet eine Textdatei mit einer Tcl-Listenstruktur des eingelesenen und gekürzten Feeds. Das Skript nutzt sie, um Einträge zwischen Abrufen zu vergleichen. Es handelt sich nicht um SQLite. Jeder Feed benötigt einen eigenen beschreibbaren Cachepfad. Vorhandene Cachedateien bleiben kompatibel; sie können Feedinhalte und URLs enthalten und sollten entsprechend geschützt werden.
