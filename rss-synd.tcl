@@ -5,9 +5,17 @@
 #
 #
 # Name: RSS & Atom Syndication Script for Eggdrop
-# Author: Pho3niX (Original)
+# Copyright (c) 2007, Andrew Scott
+# Copyright (c) 2011 Andrew Scott, HM2K
+# SPDX-License-Identifier: BSD-3-Clause
+# See LICENSE for the license conditions and disclaimer.
+#
+# Original author: Andrew Scott
+# Upstream contributor: HM2K
+# Adaptation: Pho3niX (MICE07)
 # Maintainer: DiamantTh <https://github.com/DiamantTh>
-# Link: https://github.com/MICE07/rss_synd.tcl
+# Upstream: https://github.com/eggtcl/rss-synd
+# Forked from: https://github.com/MICE07/rss_synd.tcl
 # Tags: rss, atom, syndication
 # Updated: 18-Oct-2025
 #
