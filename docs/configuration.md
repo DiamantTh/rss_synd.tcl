@@ -75,6 +75,10 @@ Eggdrop writes script output to the party line (DCC chat). To reduce noise you c
 2. Adjust `log-interval` to define how many minutes the script should wait before it flushes a summary (counts per level plus first/last message).
 While buffered mode is active, individual log entries are grouped and only a compact digest is sent to DCC at the chosen interval. Switching back to `immediate` restores the previous behaviour.
 ## Compatibility & versions
-- Requires an Eggdrop with Tcl support and the standard `http` package; optional features rely on `base64`, `tls`, and `Trf` (`package require …` in `rss-synd.tcl`).
+- Requires Eggdrop with Tcl 8.6 and the standard `http` and `zlib` packages; optional features rely on `base64`, `tls`, and `tomltcl`.
 - HTTPS certificates are validated by default. The script enables TLS 1.2/1.3 and registers its own TLS sockets.
 - `https-allow-legacy` permits older TLS protocols as a fallback and is insecure; enable it only when required by the server.
+
+### Feed cache
+
+Each `database` path holds a text file containing a Tcl list representation of the parsed and trimmed feed, used to compare entries between polls. It is not SQLite. Keep each feed's cache path separate and writable. Existing cache files remain compatible; protect them as they can contain feed content and URLs.

@@ -805,4 +805,44 @@ test atom_self_closing_link {Atom link attributes survive parsing} -body {
     dict get $attrs href
 } -result https://example.test/article
 
+test gzip_header_and_integrity {gzip decoder handles optional filename headers and rejects corrupt data} -body {
+    set gz [zlib gzip "feed data"]
+    binary scan [string index $gz 3] cu flags
+    set gz [string replace $gz 3 3 [binary format c [expr {$flags | 8}]]]
+    set gz "[string range $gz 0 9]feed.xml\x00[string range $gz 10 end]"
+    set broken [string replace $gz end-7 end-7 \x00]
+    list [::rss-synd::feed_gzip $gz] [catch {::rss-synd::feed_gzip $broken}]
+} -result {{feed data} 1}
+
+test gzip_callback_before_encoding {compressed feed is decoded before feedencoding and cached} -setup {
+    set db [file join $here gzip-callback.db]
+    file delete -force $db
+    set xml {<rss><channel><title>News</title><item><title>Caf&#233;</title></item></channel></rss>}
+    array set ::gzipToken [list status ok url http://example.test/feed http {HTTP/1.1 200 OK} ncode 200 meta {Content-Encoding gzip} body [zlib gzip $xml]]
+} -body {
+    set config [list feed-name example database $db depth 0 max-depth 3 timeout 1000 headers {} announce-output 0 trigger-output 1 feedencoding utf-8]
+    ::rss-synd::feed_callback $config ::gzipToken
+    set fp [open $db r]
+    set cached [read $fp]
+    close $fp
+    list [::rss-synd::feed_info $cached] [file exists $db] [info exists ::gzipToken]
+} -cleanup {
+    unset -nocomplain ::gzipToken
+    file delete -force $db
+} -result {1 1 0}
+
+test already_decoded_gzip_callback {HTTP packages may already decompress a gzip response} -setup {
+    set db [file join $here gzip-decoded.db]
+    file delete -force $db
+    array set ::gzipToken [list status ok url http://example.test/feed http {HTTP/1.1 200 OK} ncode 200 meta {Content-Encoding gzip} body {<rss><channel><item><title>News</title></item></channel></rss>}]
+} -body {
+    set config [list feed-name example database $db depth 0 max-depth 3 timeout 1000 headers {} announce-output 0 trigger-output 1]
+    ::rss-synd::feed_callback $config ::gzipToken
+    list [file exists $db] [info exists ::gzipToken]
+} -cleanup {
+    unset -nocomplain ::gzipToken
+    file delete -force $db
+} -result {1 0}
+
 cleanupTests
+
