@@ -213,3 +213,11 @@ Im Pufferbetrieb werden einzelne Meldungen nicht mehr sofort angezeigt, sondern 
 
 - Benötigt einen Eggdrop mit Tcl-Unterstützung und dem Standardpaket `http`; optionale Features setzen `base64`, `tls` und `Trf` voraus (`package require …` in `rss-synd.tcl`).
 - Für HTTPS-Verbindungen initialisiert das Skript standardmäßig TLS 1.2/1.3 und registriert eigene TLS-Sockets; über `https-allow-legacy` kannst du bei Bedarf ältere Protokolle freischalten.
+
+## Lizenz und Herkunft
+
+Der aus dem ursprünglichen RSS & Atom Syndication Script for Eggdrop übernommene Code steht unter der [BSD-3-Clause-Lizenz](LICENSE). Bei Weitergabe als Quellcode müssen die Copyright-Vermerke, die Lizenzbedingungen und der Haftungsausschluss erhalten bleiben. Bei Weitergabe in Binärform müssen diese Hinweise in der beigefügten Dokumentation oder in anderen Begleitmaterialien enthalten sein. Die Namen der Autoren und Mitwirkenden dürfen nur mit Genehmigung zur Werbung für abgeleitete Produkte verwendet werden.
+
+- Andrew Scott schrieb das ursprüngliche Skript. Die [Projektgeschichte](https://github.com/eggtcl/rss-synd/blob/8d4ba6dcd11edb39f98d30b83027962af55b12c4/HISTORY) nennt den 23. August 2005 als Datum der Erstveröffentlichung. Der [älteste verfügbare Quelltext](https://github.com/eggtcl/rss-synd/blob/cc672265/rss-synd.tcl#L1-L28) enthält seinen Copyright-Vermerk von 2007.
+- HM2K kam 2011 hinzu. Der [Dateikopf des Upstreams](https://github.com/eggtcl/rss-synd/blob/8d4ba6dcd11edb39f98d30b83027962af55b12c4/rss-synd.tcl#L9-L14) nennt Andrew Scott und HM2K und verweist auf den [ursprünglichen Lizenztext](https://github.com/eggtcl/rss-synd/blob/8d4ba6dcd11edb39f98d30b83027962af55b12c4/LICENSE).
+- Pho3niX (MICE07) bearbeitete den Code 2014. Dieser Fork basiert direkt auf [MICE07/rss_synd.tcl](https://github.com/MICE07/rss_synd.tcl) und wird von [DiamantTh](https://github.com/DiamantTh) gepflegt.
