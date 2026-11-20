@@ -224,6 +224,9 @@ proc ::rss-synd::format_header_debug {headersList} {
         set headerParts {}
         if {[expr {[llength $headersList] % 2}] == 0} {
                 foreach {key value} $headersList {
+                        if {[string equal -nocase $key Authorization]} {
+                                set value "<redacted>"
+                        }
                         lappend headerParts "$key: $value"
                 }
         }
@@ -1114,36 +1117,16 @@ proc ::rss-synd::feed_get {args} {
 
                         set callbackData [concat [array get feed] [list feed-name $name depth 0]]
 
-                        set headerSummary "keine"
-                        if {[llength $feed(headers)] > 0} {
-                                set headerPairs {}
-                                foreach {hKey hValue} $feed(headers) {
-                                        lappend headerPairs "$hKey: $hValue"
-                                }
-                                set headerSummary [join $headerPairs ", "]
-                        }
-
-                        if {[dict exists $debugOptions http] && [dict get $debugOptions http]} {
-                                ::rss-synd::log_message debug [format "RSS Debug HTTP: Feed '%s' -> GET %s (User-Agent: %s; Header: %s)" $name $feed(url) $userAgent $headerSummary]
-                        }
-
-                        set getResult [catch {::http::geturl "$feed(url)" -command [list [namespace current]::feed_callback $callbackData] -timeout $feed(timeout) -headers $feed(headers)} token]
-
-                        if {$getResult != 0} {
-                                ::rss-synd::log_message error "RSS HTTP Fehler: Anfrage für "$feed(url)" konnte nicht gestartet werden: $token"
-                                continue
-                        }
                         if {[dict exists $debugOptions http] && [dict get $debugOptions http]} {
                                 set headerText [::rss-synd::format_header_debug $feed(headers)]
-                                ::rss-synd::log_message info [format "\002RSS Debug\002: HTTP-Abruf für '%s' (Timeout: %s ms, Header: %s)" $feed(url) $feed(timeout) $headerText]
+                                ::rss-synd::log_message info [format "\002RSS Debug HTTP\002: HTTP-Abruf für '%s' (Timeout: %s ms, Header: %s)" $feed(url) $feed(timeout) $headerText]
                         }
 
-                        set getResult [catch {::http::geturl "$feed(url)" -command "[namespace current]::feed_callback {[array get feed] depth 0}" -timeout $feed(timeout) -headers $feed(headers)} token]
-
-                        if {$getResult != 0} {
-                                ::rss-synd::log_message error "\002RSS HTTP Fehler\002: Anfrage für \"$feed(url)\" konnte nicht gestartet werden: $token"
+                        if {[catch {::http::geturl $feed(url) -command [list [namespace current]::feed_callback $callbackData] -timeout $feed(timeout) -headers $feed(headers)} err]} {
+                                ::rss-synd::log_message error [format {RSS HTTP Error: Abruf für "%s" fehlgeschlagen: %s} $name $err]
+                                unset feed
                                 continue
-			}
+                        }
 
                         set feed(updated) [unixtime]
                         set rss($name) [array get feed]
@@ -1160,8 +1143,6 @@ proc ::rss-synd::feed_callback {feedlist args} {
         array set feed $feedlist
         variable packages
         variable debugOptions
-
-        upvar 0 $token state
 
         set feedName "unbekannt"
         if {[info exists feed(feed-name)] && $feed(feed-name) ne ""} {
@@ -1180,54 +1161,53 @@ proc ::rss-synd::feed_callback {feedlist args} {
                 return 1
         }
 
-        array set meta $state(meta)
-
+        set meta {}
+        foreach {key value} $state(meta) {
+                dict set meta [string tolower $key] $value
+        }
+        set code [::http::ncode $token]
         if {$debugHttp} {
-                set httpCode [::http::ncode $token]
-                set httpStatus ""
-                if {[info exists state(http)]} {
-                        set httpStatus $state(http)
-                }
-                ::rss-synd::log_message debug [format "RSS Debug HTTP: Feed '%s' <- %s (Status: %s; Code: %s)" $feedName $state(url) $httpStatus $httpCode]
+                ::rss-synd::log_message debug [format "\002RSS Debug HTTP\002: Feed '%s' <- %s (Status: %s; Code: %s)" $feedName $state(url) $state(http) $code]
         }
 
-        if {([::http::ncode $token] == 302) || ([::http::ncode $token] == 301)} {
-                set feed(depth) [expr {$feed(depth) + 1 }]
-
-                if {$feed(depth) < $feed(max-depth)} {
-                        if {![info exists meta(Location)] || $meta(Location) eq ""} {
-                                ::rss-synd::log_message error "RSS HTTP Error: $state(url) (State: Redirect ohne Location-Header)"
-                        } else {
-                                set base $state(url)
-                                if {[catch {set redirectUrl [[namespace current]::resolve_redirect $base $meta(Location)]} redirectErr]} {
-                                        ::rss-synd::log_message error "RSS HTTP Error: Weiterleitung für "$state(url)" fehlgeschlagen: $redirectErr"
-                                } else {
-                                        if {$debugRedirect} {
-                                                ::rss-synd::log_message debug [format "RSS Debug Redirect: Feed '%s' folgt %s -> %s" $feedName $state(url) $redirectUrl]
-                                        }
-                                        set redirectOptions [list -command [list [namespace current]::feed_callback [array get feed]] -timeout $feed(timeout) -headers $feed(headers)]
-                                        namespace eval ::http { variable url args }
-                                        set ::http::url $redirectUrl
-                                        set ::http::args $redirectOptions
-                                        set redirectResult [catch {::http::geturl "$redirectUrl" {*}$redirectOptions} redirectToken]
-                                        if {[dict exists $debugOptions http] && [dict get $debugOptions http]} {
-                                                set headerText [::rss-synd::format_header_debug $feed(headers)]
-                                                ::rss-synd::log_message info [format "\002RSS Debug\002: HTTP-Redirect-Abruf für '%s' (Timeout: %s ms, Header: %s)" $redirectUrl $feed(timeout) $headerText]
-                                        }
-                                        set redirectResult [catch {::http::geturl "$redirectUrl" -command "[namespace current]::feed_callback {[array get feed]}" -timeout $feed(timeout) -headers $feed(headers)} redirectToken]
-                                        if {$redirectResult != 0} {
-                                                ::rss-synd::log_message error "RSS HTTP Fehler: Weiterleitungsabruf von "$redirectUrl" scheiterte: $redirectToken"
+        if {$code in {301 302 303 307 308}} {
+                set base $state(url)
+                ::http::cleanup $token
+                if {$feed(depth) >= $feed(max-depth)} {
+                        ::rss-synd::log_message error "RSS HTTP Error: Redirect-Limit für '$feedName' erreicht."
+                        return 1
+                }
+                if {![dict exists $meta location] || [dict get $meta location] eq ""} {
+                        ::rss-synd::log_message error "RSS HTTP Error: Redirect für '$feedName' ohne Location."
+                        return 1
+                }
+                incr feed(depth)
+                if {[catch {
+                        set redirectUrl [resolve_redirect $base [dict get $meta location]]
+                        set originPattern {^https?://[^/?#@]+(?=[/?#]|$)}
+                        if {![regexp -nocase $originPattern $redirectUrl targetOrigin]} {
+                                error "Ungültiges HTTP-Weiterleitungsziel"
+                        }
+                        if {![regexp -nocase $originPattern $base baseOrigin] || ![string equal -nocase $baseOrigin $targetOrigin]} {
+                                set headers {}
+                                foreach {key value} $feed(headers) {
+                                        if {![string equal -nocase $key Authorization]} {
+                                                lappend headers $key $value
                                         }
                                 }
+                                set feed(headers) $headers
                         }
-                } else {
-                        ::rss-synd::log_message error "RSS HTTP Error: $state(url) (State: timeout, max refer limit reached)"
+                        if {$debugRedirect} {
+                                ::rss-synd::log_message debug [format "\002RSS Debug Redirect\002: Feed '%s' folgt %s -> %s" $feedName $base $redirectUrl]
+                        }
+                        ::http::geturl $redirectUrl -command [list [namespace current]::feed_callback [array get feed]] -timeout $feed(timeout) -headers $feed(headers)
+                } err]} {
+                        ::rss-synd::log_message error "RSS HTTP Error: Weiterleitung für '$feedName' fehlgeschlagen: $err"
                 }
-
-                ::http::cleanup $token
                 return 1
-        } elseif {[::http::ncode $token] != 200} {
-                ::rss-synd::log_message error "RSS HTTP Error: $state(url) ($state(http))"
+        }
+        if {$code != 200} {
+                ::rss-synd::log_message error "RSS HTTP Error: $state(url) ($state(http))"
                 ::http::cleanup $token
                 return 1
         }
@@ -1246,22 +1226,22 @@ proc ::rss-synd::feed_callback {feedlist args} {
                 }
         }
 
-        if {([info exists meta(Content-Encoding)]) &&             ([string equal $meta(Content-Encoding) "gzip"])} {
+        if {[dict exists $meta content-encoding] && [string equal -nocase [dict get $meta content-encoding] gzip]} {
                 if {[catch {[namespace current]::feed_gzip $data} data] != 0} {
-                        ::rss-synd::log_message error "RSS Error: Unable to decompress "$state(url)": $data"
+                        ::rss-synd::log_message error "RSS Error: Unable to decompress $state(url): $data"
                         ::http::cleanup $token
                         return 1
                 }
         }
 
         if {[catch {[namespace current]::xml_list_create $data} data] != 0} {
-                ::rss-synd::log_message error "RSS Error: Unable to parse feed properly, parser returned error. "$state(url)""
+                ::rss-synd::log_message error "RSS Error: Unable to parse feed properly, parser returned error for $state(url)"
                 ::http::cleanup $token
                 return 1
         }
 
         if {[string length $data] == 0} {
-                ::rss-synd::log_message error "RSS Error: Unable to parse feed properly, no data returned. "$state(url)""
+                ::rss-synd::log_message error "RSS Error: Unable to parse feed properly, no data returned for $state(url)"
                 ::http::cleanup $token
                 return 1
         }
@@ -1492,6 +1472,12 @@ proc ::rss-synd::resolve_redirect {base location} {
                 return $location
         }
 
+        if {[regexp -nocase {^(https?):} $base -> scheme] && [string match {//*} $location]} {
+                return "$scheme:$location"
+        }
+        if {[regexp {^[a-zA-Z][a-zA-Z0-9+.-]*:} $location]} {
+                error "Nicht unterstütztes URL-Schema"
+        }
         if {![info exists base] || $base eq ""} {
                 return $location
         }
@@ -1503,11 +1489,14 @@ proc ::rss-synd::resolve_redirect {base location} {
         }
 
         # einfache Fallback-Auflösung ohne uri::resolve
-        if {[regexp -nocase {^(https?://[^/]+)(/.*)?$} $base -> prefix pathPart]} {
+        if {[regexp -nocase {^(https?://[^/?#]+)(/[^?#]*)?(?:[?#].*)?$} $base -> prefix pathPart]} {
                 if {$location eq ""} {
                         return $base
                 }
 
+                if {[string index $location 0] eq "?"} {
+                        return "$prefix$pathPart$location"
+                }
                 if {[string match "/*" $location]} {
                         return "$prefix$location"
                 }

@@ -413,8 +413,8 @@ test feed_get_logs_http_debug_info {HTTP-Debug protokolliert URL, Timeout und He
     ::testhelpers::reset_logs
     ::rss-synd::feed_get
     set logs [::testhelpers::get_logs]
-    set hasLog [expr {[lsearch -glob $logs "\u0002RSS Debug\u0002: HTTP-Abruf für * (Timeout: 1500 ms, Header: keine)"] >= 0}]
-    return [list [expr {[llength $logs] >= 1}] $hasLog]
+    set hasLog [expr {[lsearch -glob $logs "\u0002RSS Debug HTTP\u0002: HTTP-Abruf für * (Timeout: 1500 ms, Header: keine)"] >= 0}]
+    return [list [expr {[llength $logs] >= 1}] $hasLog $::http::tokenCounter]
 } -cleanup {
     namespace eval ::rss-synd { catch {array unset rss} }
     if {[info exists ::test_savedRssDebug] && [llength $::test_savedRssDebug] > 0} {
@@ -431,7 +431,7 @@ test feed_get_logs_http_debug_info {HTTP-Debug protokolliert URL, Timeout und He
     catch {unset ::test_savedRssDebug}
     namespace eval ::http { set statusByToken {}; set tokenCounter 0 }
     ::testhelpers::reset_logs
-} -result {1 1}
+} -result {1 1 1}
 
 test feed_callback_logs_redirect_http_debug {HTTP-Debug gibt Informationen zum Redirect-Abruf aus} -body {
     set ::test_savedDebugMode_redirect [namespace eval ::rss-synd {
@@ -474,10 +474,10 @@ test feed_callback_logs_redirect_http_debug {HTTP-Debug gibt Informationen zum R
         depth 0
         max-depth 5
     }
-    set callbackResult [catch {::rss-synd::feed_callback $feedlist tokenRedirect}]
+    set callbackResult [catch {::rss-synd::feed_callback $feedlist ::tokenRedirect}]
     set logs [::testhelpers::get_logs]
     set hasHttpLog [expr {[lsearch -glob $logs "\u0002RSS Debug HTTP\u0002: Feed '* (Status: HTTP/1.1 302 Found; Code: *"] >= 0}]
-    return [list $callbackResult [expr {[llength $logs] >= 1}] $hasHttpLog]
+    return [list $callbackResult [expr {[llength $logs] >= 1}] $hasHttpLog $::http::tokenCounter]
 } -cleanup {
     catch {array unset ::tokenRedirect}
     namespace eval ::http { set statusByToken {}; set tokenCounter 0 }
@@ -490,7 +490,7 @@ test feed_callback_logs_redirect_http_debug {HTTP-Debug gibt Informationen zum R
         unset ::test_savedDebugMode_redirect
     }
     ::testhelpers::reset_logs
-} -result {1 1 1}
+} -result {0 1 1 1}
 
 # Test: xml_list_create kann auf Teilbereiche beschränkt werden
 set childXml "<root><entry>A</entry><entry>B</entry></root>"
@@ -694,10 +694,8 @@ test feed_callback_emits_redirect_debug {Redirect-Debugmeldungen werden erzeugt}
     set savedGeturlBody [info body ::http::geturl]
     namespace eval ::http { variable lastRedirectArgs {} }
     proc ::http::geturl {url args} {
-        namespace eval ::http {
-            variable lastRedirectArgs
-            set lastRedirectArgs [list $url $args]
-        }
+        variable lastRedirectArgs
+        set lastRedirectArgs [list $url $args]
         return redirect-token
     }
     ::rss-synd::configure_debug [list debug-mode redirect]
