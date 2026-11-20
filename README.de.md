@@ -4,7 +4,7 @@
 
 [![Lizenz: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](LICENSE)
 
-Ursprünglich von Andrew Scott geschrieben, HM2K wirkte am Upstream mit. Pho3niX (MICE07) passte das Skript an, DiamantTh pflegt diesen Fork. Mehr dazu unter [Lizenz und Herkunft](#lizenz-und-herkunft).
+Der übernommene Code steht unter BSD-3-Clause. Andrew Scott schrieb das Original, HM2K wirkte am Upstream mit. Pho3niX (MICE07) passte das Skript an, DiamantTh pflegt diesen Fork. Mehr dazu unter [Lizenz und Herkunft](#lizenz-und-herkunft).
 
 ## Einleitung
 Das Skript `rss-synd.tcl` erweitert Eggdrop-Bots um die Möglichkeit, RSS- und Atom-Feeds automatisiert auszulesen, neue Einträge zu erkennen und sie in IRC-Kanälen anzukündigen. Es unterstützt dabei sichere Verbindungen, benutzerdefinierte Ausgaben und flexible Trigger-Mechanismen.
