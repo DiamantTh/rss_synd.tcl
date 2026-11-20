@@ -794,7 +794,6 @@ proc ::rss-synd::init {args} {
         package require http
         set packages(base64) [catch {package require base64}]; # http auth
         set packages(tls) [catch {package require tls}]; # https
-        set packages(trf) [catch {package require Trf}]; # gzip compression
         set packages(uri) [catch {package require uri}]; # URL-Auflösung
 
         if {[info exists settings] && [array exists settings]} {
@@ -1235,24 +1234,30 @@ proc ::rss-synd::feed_callback {feedlist args} {
 
         set data [::http::data $token]
 
-        if {[info exists feed(feedencoding)]} {
-                set data [encoding convertfrom [string tolower $feed(feedencoding)] $data]
-        }
-
-        if {[info exists feed(charset)]} {
-                if {[string tolower $feed(charset)] == "utf-8" && [is_utf8_patched]} {
-                        #do nothing, already utf-8
-                } else {
-                        set data [encoding convertto [string tolower $feed(charset)] $data]
-                }
-        }
-
         if {[dict exists $meta content-encoding] && [string equal -nocase [dict get $meta content-encoding] gzip]} {
-                if {[catch {[namespace current]::feed_gzip $data} data] != 0} {
+                # Current Tcl http releases already decode Content-Encoding.
+                # Older releases may return the original gzip bytes instead.
+                set gzipBytes [expr {[string range $data 0 1] eq "\x1f\x8b"}]
+                if {$gzipBytes && [catch {[namespace current]::feed_gzip $data} data] != 0} {
                         ::rss-synd::log_message error "RSS Error: Unable to decompress $state(url): $data"
                         ::http::cleanup $token
                         return 1
                 }
+        }
+
+        if {[catch {
+                if {[info exists feed(feedencoding)]} {
+                        set data [encoding convertfrom [string tolower $feed(feedencoding)] $data]
+                }
+                if {[info exists feed(charset)]} {
+                        if {[string tolower $feed(charset)] ne "utf-8" || ![is_utf8_patched]} {
+                                set data [encoding convertto [string tolower $feed(charset)] $data]
+                        }
+                }
+        } err]} {
+                ::rss-synd::log_message error "RSS Encoding Error: Unable to convert $state(url): $err"
+                ::http::cleanup $token
+                return 1
         }
 
         if {[catch {[namespace current]::xml_list_create $data} data] != 0} {
@@ -1338,22 +1343,8 @@ proc ::rss-synd::feed_info {data {target "feed"}} {
 
 # decompress gzip formatted data
 proc ::rss-synd::feed_gzip {cdata} {
-	variable packages
-
-	if {(![info exists packages(trf)]) || \
-	    ($packages(trf) != 0)} {
-		error "Trf package not found."
-	}
-
-	# remove the 10 byte gzip header and 8 byte footer
-	set cdata [string range $cdata 10 [expr { [string length $cdata] - 9 } ]]
-
-	# decompress the raw data
-	if {[catch {zip -mode decompress -nowrap 1 $cdata} data] != 0} {
-		error $data
-	}
-
-	return $data
+        # Tcl 8.6's gzip decoder handles optional headers and checks integrity.
+        return [zlib gunzip $cdata]
 }
 
 proc ::rss-synd::feed_read { } {
@@ -2200,3 +2191,4 @@ proc ::rss-synd::urldecode {str} {
 }
 
 ::rss-synd::init
+
