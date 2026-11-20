@@ -76,4 +76,5 @@ Eggdrop writes script output to the party line (DCC chat). To reduce noise you c
 While buffered mode is active, individual log entries are grouped and only a compact digest is sent to DCC at the chosen interval. Switching back to `immediate` restores the previous behaviour.
 ## Compatibility & versions
 - Requires an Eggdrop with Tcl support and the standard `http` package; optional features rely on `base64`, `tls`, and `Trf` (`package require …` in `rss-synd.tcl`).
-- For HTTPS connections the script enables TLS 1.2/1.3 by default and registers its own TLS sockets; you can enable older protocols via `https-allow-legacy` if needed.
+- HTTPS certificates are validated by default. The script enables TLS 1.2/1.3 and registers its own TLS sockets.
+- `https-allow-legacy` permits older TLS protocols as a fallback and is insecure; enable it only when required by the server.
