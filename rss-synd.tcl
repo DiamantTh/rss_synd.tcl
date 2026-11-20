@@ -525,17 +525,19 @@ proc ::rss-synd::load_config {} {
         }
         set tomlFile [::rss-synd::resolve_path $tomlFile $scriptDir]
 
-        if {[catch {package require toml} err]} {
-                ::rss-synd::use_fallback_config "\002RSS Fehler\002: toml-Paket nicht verfügbar ($err), nutze Tcl-Fallback."
-                return
-        }
-
         if {![file exists $tomlFile]} {
                 ::rss-synd::use_fallback_config "\002RSS Fehler\002: TOML-Datei '$tomlFile' nicht gefunden, nutze Tcl-Fallback."
                 return
         }
 
-        if {[catch {set parsed [::toml::parsefile $tomlFile]} err]} {
+        if {[catch {
+                if {![catch {package require tomltcl}]} {
+                        set parsed [::tomltcl::unwrap [::tomltcl::read_file $tomlFile]]
+                } else {
+                        package require toml
+                        set parsed [::toml::parsefile $tomlFile]
+                }
+        } err]} {
                 ::rss-synd::use_fallback_config "\002RSS Fehler\002: TOML-Datei konnte nicht gelesen werden: $err"
                 return
         }

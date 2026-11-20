@@ -27,7 +27,7 @@ Die folgenden optionalen Funktionen erfordern zusätzliche Tcl-Erweiterungen:
 | HTTP-Authentifizierung | `base64` aus `tcllib` |
 | HTTPS-Unterstützung | `tls` |
 | Gzip-Dekomprimierung | `Trf` |
-| TOML-Konfiguration | `toml` aus `tcllib` |
+| TOML-Konfiguration | [`tomltcl`](https://github.com/avohra25/tomltcl) |
 
 Installiere die benötigten Erweiterungen je nach Plattform über den jeweiligen Paketmanager, vorgefertigte Tcl-Pakete oder verfügbare Community-Repositorien.
 
@@ -44,7 +44,7 @@ Das Skript läuft ohne zusätzliche Pakete, jedoch sind bestimmte Funktionen nur
 ```tcl
 namespace eval ::rss-synd {
     # "tcl" nutzt die Beispielkonfiguration in rss-set.tcl (Standard).
-    # "toml" nutzt rss-set.toml und benötigt das Tcllib-Paket "toml".
+    # "toml" nutzt rss-set.toml und benötigt das Paket "tomltcl".
     set settings(config-format) tcl
 
     # Optional eigene Pfade setzen:
@@ -66,6 +66,10 @@ namespace eval ::rss-synd {
   ```
 
 - **Tcl**: Setze `config-format` auf `tcl` und gib optional `config-tcl-file` an. Ohne eigenen Pfad wird die Beispielkonfiguration in `rss-set.tcl` verwendet.
+
+Mit `tclsh tools/config-convert.tcl --from tcl --to toml --input rss-set.tcl --output converted.toml`
+wandelst du eine Konfiguration um. Für die Gegenrichtung tauschst du die Formate und gibst eine Tcl-Ausgabedatei an.
+Beide Richtungen benötigen `tomltcl` im Tcl-Paketsuchpfad. Konvertiere nur vertrauenswürdige Tcl-Dateien, da ihr Inhalt ausgeführt wird. Sind deine Einstellungen auf mehrere Dateien verteilt, gib die Datei mit den Feed-Definitionen an.
 
 Die folgenden Optionen kannst du global in der Default-Konfiguration oder pro Feed festlegen. Spezifische Feed-Werte überschreiben globale Einstellungen.
 
