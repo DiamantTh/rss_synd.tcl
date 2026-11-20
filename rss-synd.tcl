@@ -993,14 +993,14 @@ proc ::rss-synd::trigger {nick user handle args} {
 		lappend list_msgs "Available feeds: [join $list_feeds ", "]."
 
 		if {$chan != ""} {
-			set list_type [lindex $feed(trigger-type) 0]
+			set list_type [lindex [split [dict get $default trigger-type] :] 0]
 			set list_targets $chan
 		} else {
-			set list_type [lindex $feed(trigger-type) 1]
+			set list_type [lindex [split [dict get $default trigger-type] :] 1]
 			set list_targets ""
 		}
 
-		[namespace current]::feed_msg $list_type $list_msgs list_targets $nick
+		[namespace current]::feed_msg $list_type $list_msgs $list_targets $nick
 	}
 }
 
@@ -1868,8 +1868,8 @@ proc ::rss-synd::feed_msg {type msgs targets {nick ""}} {
 
 	foreach msg $msgs {
 		foreach chan $targets {
-			if {([catch {botonchan $chan}] == 0) || \
-			    ([regexp -- {^[#&]} $chan] == 0)} {
+			if {![regexp -- {^[#&+!]} $chan] ||
+                            (![catch {botonchan $chan} joined] && $joined)} {
 				foreach line [split $msg "\n"] {
 					if {($type == 1) || ($type == 3)} {
 						putserv "NOTICE $chan :$line"
