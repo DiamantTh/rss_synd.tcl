@@ -3,6 +3,8 @@
 # Aufruf:
 #   tclsh tools/config-convert.tcl --from <toml|tcl> --to <toml|tcl> --input <Datei> --output <Datei|->
 #
+# Tcl-Eingaben werden ausgeführt. Nur vertrauenswürdige Dateien verwenden.
+#
 # Optionen:
 #   --from   Quellformat der Konfiguration ("toml" oder "tcl").
 #   --to     Zielformat der Konfiguration ("toml" oder "tcl").
@@ -10,9 +12,6 @@
 #   --output Pfad zur Ausgabedatei. "-" schreibt nach stdout.
 
 namespace eval ::config_convert {
-        variable scriptDir [file dirname [file normalize [info script]]]
-        variable projectRoot [file normalize [file join $scriptDir ..]]
-
         proc parse_args {argv} {
                 set options [dict create from {} to {} input {} output {} help 0]
 
@@ -51,8 +50,8 @@ namespace eval ::config_convert {
         }
 
         proc ensure_toml_package {} {
-                if {[catch {package require toml} err]} {
-                        error "Das Paket 'toml' ist erforderlich: $err"
+                if {[catch {package require tomltcl} err]} {
+                        error "Das Paket 'tomltcl' ist erforderlich: $err"
                 }
         }
 
@@ -73,6 +72,7 @@ namespace eval ::config_convert {
                         error "Kann Ausgabedatei '$path' nicht öffnen: $err"
                 }
                 try {
+                        fconfigure $fh -encoding utf-8 -translation lf
                         puts $fh $data
                 } finally {
                         close $fh
@@ -80,92 +80,81 @@ namespace eval ::config_convert {
         }
 
         proc format_tcl_output {configDict} {
-                set defaults {}
-                set defaultsDict [dict get $configDict defaults]
-                foreach key [lsort [dict keys $defaultsDict]] {
-                        lappend defaults $key [dict get $defaultsDict $key]
+                set body "variable settings\nvariable default\nvariable rss\n"
+                append body [list set settings(config-format) tcl] "\n"
+                append body [list set default [dict get $configDict defaults]] "\n"
+                dict for {name feed} [dict get $configDict feeds] {
+                        append body [list set rss($name) $feed] "\n"
                 }
-                set lines [list [format "set default {%s}" [list {*}$defaults]] ""]
+                return [list namespace eval ::rss-synd $body]
+        }
 
-                set feedsDict [dict get $configDict feeds]
-                foreach feedName [lsort [dict keys $feedsDict]] {
-                        set feedList {}
-                        set feedDict [dict get $feedsDict $feedName]
-                        foreach key [lsort [dict keys $feedDict]] {
-                                lappend feedList $key [dict get $feedDict $key]
+        proc toml_table {options} {
+                set table {}
+                dict for {key value} $options {
+                        if {$key eq "user-agent" && ![catch {llength $value}]} {
+                                set agents {}
+                                foreach agent $value {
+                                        lappend agents [list string $agent]
+                                }
+                                set node [list array $agents]
+                        } elseif {$key in {announce-output trigger-output remove-empty
+                                announce-type max-depth evaluate-tcl update-interval
+                                output-order timeout https-allow-legacy enable-gzip log-interval}
+                                && [regexp {^-?(0|[1-9][0-9]*)$} $value]
+                                && [string is wideinteger -strict $value]} {
+                                set node [list integer $value]
+                        } else {
+                                set node [list string $value]
                         }
-                        lappend lines [format "set rss(%s) {%s}" $feedName [list {*}$feedList]]
+                        dict set table $key $node
                 }
-                return [join $lines "\n"]
+                return [list table $table]
         }
 
         proc format_toml_output {configDict} {
-                ensure_toml_package
-                return [::toml::encode $configDict]
-        }
-
-        proc ensure_runtime_stubs {} {
-                if {![llength [info commands ::putlog]]} {
-                        proc ::putlog {args} {}
+                set feeds {}
+                dict for {name feed} [dict get $configDict feeds] {
+                        dict set feeds $name [toml_table $feed]
                 }
-                if {![llength [info commands ::putserv]]} {
-                        proc ::putserv {args} {}
-                }
-                if {![llength [info commands ::botonchan]]} {
-                        proc ::botonchan {chan} {return 1}
-                }
-                if {![llength [info commands ::bind]]} {
-                        proc ::bind {args} {}
-                }
-                if {![llength [info commands ::unbind]]} {
-                        proc ::unbind {args} {}
-                }
-                if {![llength [info commands ::utimer]]} {
-                        proc ::utimer {args} {return {}}
-                }
-                if {![llength [info commands ::killutimer]]} {
-                        proc ::killutimer {args} {return {}}
-                }
-                if {![llength [info commands ::is_utf8_patched]]} {
-                        proc ::is_utf8_patched {} {return 0}
-                }
+                set document [dict create defaults [toml_table [dict get $configDict defaults]] \
+                        feeds [list table $feeds]]
+                return [::tomltcl::encode [list table $document]]
         }
 
         proc load_configuration {format inputPath} {
-                variable projectRoot
-
-                set scriptPath [file join $projectRoot rss-synd.tcl]
-                if {![file exists $scriptPath]} {
-                        error "rss-synd.tcl nicht gefunden unter '$scriptPath'"
-                }
-
-                ensure_runtime_stubs
-
-                if {[catch {source $scriptPath} err]} {
-                        error "Fehler beim Laden von '$scriptPath': $err"
-                }
-
-                namespace eval ::rss-synd { variable settings }
-                upvar 0 ::rss-synd::settings settings
-                set formatLower [string tolower $format]
-                switch -exact -- $formatLower {
-                        toml {
-                                set settings(config-format) toml
-                                set settings(config-toml-file) $inputPath
-                                set settings(config-tcl-file) {}
-                        }
-                        tcl {
-                                set settings(config-format) tcl
-                                set settings(config-tcl-file) $inputPath
-                                set settings(config-toml-file) {}
+                if {$format eq "toml"} {
+                        set config [::tomltcl::unwrap [::tomltcl::read_file $inputPath]]
+                } else {
+                        # Tcl settings are executable. Load trusted input in a separate interpreter
+                        # so the converter neither starts Eggdrop nor inherits another config.
+                        set child [interp create]
+                        try {
+                                interp eval $child [list namespace eval ::rss-synd \
+                                        [list source -encoding utf-8 $inputPath]]
+                                set config [interp eval $child {
+                                        namespace eval ::rss-synd {
+                                                if {![info exists default] && ![array exists rss]} {
+                                                        error "Keine Feed-Einstellungen in der Eingabedatei."
+                                                }
+                                                if {![info exists default]} {set default {}}
+                                                dict create defaults $default feeds [array get rss]
+                                        }
+                                }]
+                        } finally {
+                                interp delete $child
                         }
                 }
-
-                if {[catch {::rss-synd::load_config} err]} {
-                        error "Konfiguration konnte nicht geladen werden: $err"
+                if {![dict exists $config defaults] && ![dict exists $config feeds]} {
+                        error "Die Eingabedatei enthält weder defaults noch feeds."
                 }
-
-                return [::rss-synd::configuration_to_dict]
+                set result [dict merge {defaults {} feeds {}} $config]
+                set defaults [dict get $result defaults]
+                dict size $defaults
+                dict for {name options} [dict get $result feeds] {
+                        dict size $options
+                }
+                return $result
         }
 
         proc main {argv} {
@@ -196,9 +185,10 @@ namespace eval ::config_convert {
                         error "Eingabedatei '$input' wurde nicht gefunden."
                 }
 
-                if {$to eq "toml"} {
-                        ensure_toml_package
+                if {$output ne "-" && [file normalize $output] eq $input} {
+                        error "Eingabe- und Ausgabedatei müssen verschieden sein."
                 }
+                ensure_toml_package
 
                 set configDict [load_configuration $from $input]
 

@@ -1,51 +1,62 @@
 package require tcltest 2
 namespace import ::tcltest::*
 
-set here [file dirname [info script]]
-set tool [file normalize [file join $here .. tools config-convert.tcl]]
-set sampleToml [file normalize [file join $here .. rss-set.toml]]
+set here [file normalize [file dirname [info script]]]
+set tool [file join $here .. tools config-convert.tcl]
+set sampleToml [file join $here .. rss-set.toml]
+set tclsh [info nameofexecutable]
+testConstraint haveToml [expr {![catch {package require tomltcl}]}]
 
-if {![file exists $tool]} {
-    error "Konverter-Skript nicht gefunden: $tool"
-}
-
-test config_convert_toml_to_tcl {Konvertierung von TOML nach Tcl erzeugt set-Blöcke} -setup {
+test convert_sample_to_tcl {TOML example becomes a loadable Tcl configuration} -constraints haveToml -setup {
     set tmpdir [makeDirectory tmp-config-convert-toml]
     set outfile [file join $tmpdir output.tcl]
+    set child [interp create]
 } -body {
-    exec tclsh $tool --from toml --to tcl --input $sampleToml --output $outfile
-    set fh [open $outfile r]
-    set content [string trim [read $fh]]
-    close $fh
-    set hasDefault [regexp {^set default \{} $content]
-    set hasAnyFeed [regexp -line {^set rss\([^)]+\) \{} $content]
-    list $hasDefault $hasAnyFeed
+    exec $tclsh $tool --from toml --to tcl --input $sampleToml --output $outfile
+    interp eval $child [list source -encoding utf-8 $outfile]
+    interp eval $child {
+        list [set ::rss-synd::settings(config-format)] [lsort [array names ::rss-synd::rss]] \
+                [dict get [set ::rss-synd::rss(example)] url]
+    }
 } -cleanup {
+    interp delete $child
     removeDirectory $tmpdir
-} -result {1 1}
+} -result {tcl example https://example.com/feed.xml}
 
-if {[catch {package require toml}]} {
-    ::tcltest::testConstraint haveToml 0
-} else {
-    ::tcltest::testConstraint haveToml 1
-}
-
-test config_convert_tcl_to_toml {Konvertierung einer Tcl-Datei nach TOML liefert parsebare Ausgabe} -constraints haveToml -setup {
+test convert_custom_roundtrip {A separate input path and feed options survive both conversions} -constraints haveToml -setup {
     set tmpdir [makeDirectory tmp-config-convert-tcl]
-    set infile [file join $tmpdir config.tcl]
-    set outfile [file join $tmpdir config.toml]
-    set fh [open $infile w]
-    puts $fh "set default {announce-output 2 channels #demo}"
-    puts $fh "set rss(example) {url http://example.test/feed update-interval 15}"
-    close $fh
+    set infile [file join $tmpdir {input config.tcl}]
+    set defaults [dict create announce-output 2 output {Änderung [Titel] $wort} \
+            user-agent {{Bot/1.0 (Test)} AnotherBot}]
+    set name {feed.with spaces}
+    set options {url http://example.test/feed update-interval 15 channels #other}
+    makeFile "[list set default $defaults]\n[list set rss($name) $options]" [file tail $infile] $tmpdir
+    set outfile [file join $tmpdir output.toml]
+    set roundtrip [file join $tmpdir roundtrip.tcl]
+    set child [interp create]
 } -body {
-    exec tclsh $tool --from tcl --to toml --input $infile --output $outfile
-    set fh [open $outfile r]
-    set parsed [::toml::parse [read $fh]]
-    close $fh
-    list [dict get $parsed defaults announce-output] [dict get $parsed feeds example url]
+    exec $tclsh $tool --from tcl --to toml --input $infile --output $outfile
+    set document [::tomltcl::unwrap [::tomltcl::read_file $outfile]]
+    exec $tclsh $tool --from toml --to tcl --input $outfile --output $roundtrip
+    interp eval $child [list source -encoding utf-8 $roundtrip]
+    set converted [interp eval $child {set ::rss-synd::default}]
+    list [dict get $document defaults announce-output] [dict get $document feeds $name url] \
+            [expr {[dict get $converted output] eq [dict get $defaults output]}] \
+            [expr {[dict get $converted user-agent] eq [dict get $defaults user-agent]}]
+} -cleanup {
+    interp delete $child
+    removeDirectory $tmpdir
+} -result {2 http://example.test/feed 1 1}
+
+test convert_invalid_toml {Invalid input fails without creating an output file} -constraints haveToml -setup {
+    set tmpdir [makeDirectory tmp-config-convert-invalid]
+    set infile [makeFile {not = [valid} malformed.toml $tmpdir]
+    set outfile [file join $tmpdir output.tcl]
+} -body {
+    list [catch {exec $tclsh $tool --from toml --to tcl --input $infile --output $outfile}] \
+            [file exists $outfile]
 } -cleanup {
     removeDirectory $tmpdir
-} -result {2 http://example.test/feed}
+} -result {1 0}
 
 cleanupTests
