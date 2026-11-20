@@ -684,6 +684,17 @@ proc ::rss-synd::setup_tls {{settingsList {}}} {
 		}
 	}
 
+        if {$modernResult != 0 && [regexp -nocase {tls1[._]3} $modernErr]} {
+                # Older TclTLS builds can still use TLS 1.2 without enabling legacy protocols.
+                foreach options [list $baseOptions [normalize_tls_options $baseOptions]] {
+                        set appliedOptions $options
+                        set modernResult [catch {::tls::init {*}$options} modernErr]
+                        if {!$modernResult} {
+                                break
+                        }
+                }
+        }
+
 	if {$modernResult != 0} {
 		if {$tlsDebug} {
 			::rss-synd::log_message debug "$tlsPrefix: Moderne TLS-Initialisierung schlug fehl: $modernErr"

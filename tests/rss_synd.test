@@ -781,4 +781,21 @@ test settings_loading_failure_aborts_execution {Fehlende Einstellungen brechen d
     file delete -force $tmpdir
 } -result {1 1 1 1}
 
+test tls12_without_tls13 {Older TclTLS keeps TLS 1.2 enabled} -setup {
+    rename ::tls::init ::tls::saved_init
+    proc ::tls::init {args} {
+        if {[regexp {tls1[._]3} $args]} {error "unknown option -tls1.3"}
+        set ::tls::initArgs $args
+    }
+    array unset ::rss-synd::tls
+} -body {
+    set ok [::rss-synd::setup_tls {https-allow-legacy 0}]
+    set options [string map {-tls1. -tls1_} $::tls::initArgs]
+    list $ok [dict get $options -tls1_2] [dict get $options -tls1] [dict get $options -tls1_1]
+} -cleanup {
+    rename ::tls::init {}
+    rename ::tls::saved_init ::tls::init
+    array unset ::rss-synd::tls
+} -result {1 1 0 0}
+
 cleanupTests
