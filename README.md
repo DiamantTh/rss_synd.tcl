@@ -2,6 +2,10 @@
 
 > **German version:** See [README.de.md](README.de.md).
 
+[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](LICENSE)
+
+Originally written by Andrew Scott, with HM2K as an upstream contributor. Adapted by Pho3niX (MICE07) and maintained here by DiamantTh. See [License and project history](#license-and-project-history).
+
 ## Introduction
 The `rss-synd.tcl` script extends Eggdrop bots with the ability to automatically read RSS and Atom feeds, detect new entries, and announce them in IRC channels. It supports secure connections, customizable output, and flexible trigger mechanisms.
 
