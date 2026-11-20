@@ -1363,15 +1363,23 @@ proc ::rss-synd::feed_read { } {
 proc ::rss-synd::feed_write {data} {
         upvar 1 feed feed
 
-        if {[catch {open $feed(database) "w+"} fp] != 0} {
-                error $fp
+        # Keep the previous cache readable if writing or closing fails.
+        set fp [file tempfile temp "$feed(database).tmp"]
+        try {
+                try {
+                        puts -nonewline $fp [string map {"\n" "" "\r" ""} $data]
+                } finally {
+                        close $fp
+                }
+                if {[file exists $feed(database)] && $::tcl_platform(platform) eq "unix"} {
+                        file attributes $temp -permissions [file attributes $feed(database) -permissions]
+                }
+                file rename -force -- $temp $feed(database)
+        } finally {
+                if {[file exists $temp]} {
+                        file delete -- $temp
+                }
         }
-
-        set data [string map { "\n" "" "\r" "" } $data]
-
-        puts -nonewline $fp $data
-
-        close $fp
 }
 
 proc ::rss-synd::feed_trim {data feedName max_items} {
