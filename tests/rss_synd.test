@@ -798,4 +798,11 @@ test tls12_without_tls13 {Older TclTLS keeps TLS 1.2 enabled} -setup {
     array unset ::rss-synd::tls
 } -result {1 1 0 0}
 
+test atom_self_closing_link {Atom link attributes survive parsing} -body {
+    set xml {<?xml version="1.0"?><feed><entry><title>Example</title><link href="https://example.test/article" /></entry></feed>}
+    set data [::rss-synd::xml_list_create $xml]
+    set attrs [::rss-synd::xml_get_info $data {0 feed 0 entry 0 link} attrib]
+    dict get $attrs href
+} -result https://example.test/article
+
 cleanupTests

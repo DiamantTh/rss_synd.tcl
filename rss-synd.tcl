@@ -1631,7 +1631,7 @@ proc ::rss-synd::xml_list_create {xml_data {start 0} {end -1}} {
                                 }
                         }
 
-                        if {(![regexp {(\?|!|/)(\s*)$} $tag_args]) || (![string match "\?*" $tag_string])} {
+                        if {![regexp {^\?|/\s*$} $tag_string]} {
                                 set tmp_num 1
                                 set tag_success 0
                                 set tag_end_last $ptr
@@ -1656,7 +1656,7 @@ proc ::rss-synd::xml_list_create {xml_data {start 0} {end -1}} {
 
                                 if {$tag_success == 0} {
                                         ::rss-synd::log_message error "\002RSS Malformed Feed\002: Tag not closed: \"<$tag_name>\""
-                                        return
+                                        error "Tag not closed: <$tag_name>"
                                 }
 
                                 set ptr [expr {$tag_end_last + 1}]
